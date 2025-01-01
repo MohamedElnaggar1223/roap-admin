@@ -1,0 +1,25 @@
+import { z } from 'zod'
+
+export const addAthleteSchema = z.object({
+    email: z.string().optional(),
+    phoneNumber: z.string().optional(),
+    firstName: z.string().min(1, "First Name is required"),
+    lastName: z.string().min(1, "Last Name is required"),
+    gender: z.string(),
+    birthday: z.date(),
+    image: z.string().optional(),
+    certificate: z.string().optional(),
+    type: z.enum(['primary', 'fellow']),
+    firstGuardianName: z.string().optional(),
+    firstGuardianRelationship: z.string().optional(),
+    firstGuardianPhone: z.string(),
+    firstGuardianEmail: z.string().optional(),
+    secondGuardianName: z.string().optional(),
+    secondGuardianRelationship: z.string().optional(),
+    secondGuardianPhone: z.string().optional(),
+    secondGuardianEmail: z.string().optional(),
+    nationality: z.string(),
+    country: z.string(),
+    city: z.string().optional(),
+    streetAddress: z.string().optional(),
+})
