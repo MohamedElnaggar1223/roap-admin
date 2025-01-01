@@ -122,7 +122,7 @@ export default function CountriesTable() {
                                 Delete Selected ({selectedRows.length})
                             </Button>
                         )}
-                        <Link href='/countries/create">
+                        <Link href="/countries/create">
                             <Button variant="outline" className='bg-main text-white hover:bg-main-hovered hover:text-white' >
                                 <PlusIcon stroke='#fff' className="h-4 w-4" />
                                 New Country
