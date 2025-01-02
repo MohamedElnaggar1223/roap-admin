@@ -71,7 +71,7 @@ export default function AcademyHeader({ academyId, children }: Readonly<{ academ
 			} else {
 				await startImpersonation(parseInt(academyId))
 			}
-			router.push('/admin')
+			router.push('/')
 		} catch (error) {
 			console.error('Failed to switch academy:', error)
 		} finally {
