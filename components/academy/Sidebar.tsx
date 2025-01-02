@@ -66,13 +66,13 @@ export function AcademySidebar({ onboarded, ...props }: React.ComponentProps<typ
                 <SidebarContent className="bg-[#E0E4D9]">
                     <SidebarGroup className='space-y-2'>
                         <Link href='/academy/academy' className='h-10 rounded-[12px] overflow-hidden'>
-                            <SidebarMenuButton className={cn('h-full text-sm', pathname?.includes('/academy') && 'bg-[#F1F2E9]')} tooltip='Academy'>
+                            <SidebarMenuButton className={cn('h-full text-sm', pathname?.includes('/academy/academy') && 'bg-[#F1F2E9]')} tooltip='Academy'>
                                 <Image src='/images/academy.svg' width={20} height={20} alt='academy' />
                                 <span>Academy</span>
                             </SidebarMenuButton>
                         </Link>
                         <DisabledLinkWrapper href="/academy/">
-                            <SidebarMenuButton disabled={!onboarded} className={cn('h-full text-sm', pathname === '/' && 'bg-[#F1F2E9]')} tooltip='Dashboard'>
+                            <SidebarMenuButton disabled={!onboarded} className={cn('h-full text-sm', pathname === '/academy/dashboard' && 'bg-[#F1F2E9]')} tooltip='Dashboard'>
                                 <Image src='/images/dashboard.svg' width={20} height={20} alt='dashboard' />
                                 <span>Dashboard</span>
                             </SidebarMenuButton>
