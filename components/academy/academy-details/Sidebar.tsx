@@ -53,7 +53,7 @@ export function AcadenyDetailsSidebar({ onboarded }: { onboarded: boolean }) {
                 <div className="bg-[#E0E4D9] h-full">
                     <div className='flex items-start justify-start gap-2 flex-col h-full w-40'>
                         <Link href='/academy/academy' className='h-9 rounded-[12px] overflow-hidden w-full'>
-                            <div className={cn('text-sm h-9 flex items-center justify-start px-2 rounded-[12px] w-full', pathname === '/academy' && 'bg-[#F1F2E9]')}>
+                            <div className={cn('text-sm h-9 flex items-center justify-start px-2 rounded-[12px] w-full', pathname === '/academy/academy' && 'bg-[#F1F2E9]')}>
                                 <span>Academy Details</span>
                             </div>
                         </Link>
