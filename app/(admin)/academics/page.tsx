@@ -262,7 +262,7 @@ export default function AcademicsContainer() {
 			} else {
 				await startImpersonation(parseInt(academyId))
 			}
-			router.push('/dashboard')
+			router.push('/academy/dashboard')
 		} catch (error) {
 			console.error('Failed to switch academy:', error)
 		} finally {
