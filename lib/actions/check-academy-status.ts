@@ -62,7 +62,7 @@ export async function checkAcademyStatus() {
     if (!session?.user) {
         return {
             shouldRedirect: true,
-            redirectTo: '/sign-in'
+            redirectTo: '/admin-sign-in'
         }
     }
 
@@ -81,14 +81,14 @@ export async function checkAcademyStatus() {
         if (session.user.id) {
             return {
                 shouldRedirect: true,
-                redirectTo: '/sign-in',
+                redirectTo: '/admin-sign-in',
                 logout: true
             }
         }
 
         return {
             shouldRedirect: true,
-            redirectTo: '/sign-in'
+            redirectTo: '/admin-sign-in'
         }
     }
 
