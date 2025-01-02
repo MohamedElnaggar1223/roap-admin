@@ -420,7 +420,7 @@ export async function createAthlete(data: {
     }
     finally {
         revalidateTag(`athletes-${academic?.id}`)
-        revalidatePath('/academy/athletes')
+        revalidatePath('/academy/academy/athletes')
     }
 }
 
@@ -571,7 +571,7 @@ export async function updateAthlete(id: number, data: {
     }
     finally {
         revalidateTag(`athletes-${academic?.id}`)
-        revalidatePath('/academy/athletes')
+        revalidatePath('/academy/academy/athletes')
     }
 }
 
@@ -634,7 +634,7 @@ export async function deleteAthletes(ids: number[]) {
         })
 
         revalidateTag(`athletes-${academic?.id}`)
-        revalidatePath('/academy/athletes')
+        revalidatePath('/academy/academy/athletes')
         return { success: true }
     } catch (error) {
         console.error('Error deleting athletes:', error)

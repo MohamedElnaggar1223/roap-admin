@@ -231,7 +231,7 @@ export async function createCoach(data: {
         return { error: 'Failed to create coach', field: 'root' }
     }
     finally {
-        // revalidatePath('/academy/coaches')
+        // revalidatePath('/academy/academy/coaches')
         revalidateTag(`coaches-${academy?.id}`)
     }
 }
@@ -347,7 +347,7 @@ export async function updateCoach(id: number, data: {
                     }))) : Promise.resolve()
         ])
 
-        // revalidatePath('/academy/coaches')
+        // revalidatePath('/academy/academy/coaches')
         return { success: true }
 
     } catch (error) {
@@ -392,7 +392,7 @@ export async function deleteCoaches(ids: number[]) {
 
     await Promise.all(ids.map(async id => await db.delete(coaches).where(eq(coaches.id, id))))
 
-    // revalidatePath('/academy/coaches')
+    // revalidatePath('/academy/academy/coaches')
     revalidateTag(`coaches-${academy?.id}`)
     return { success: true }
 }

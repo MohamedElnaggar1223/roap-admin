@@ -452,7 +452,7 @@ export async function updateLocation(id: number, data: {
                 manageAssessmentPrograms(db, id, academy.id, sportsToAdd) : Promise.resolve()
         ])
 
-        // revalidatePath('/academy/locations')
+        // revalidatePath('/academy/academy/locations')
         return { success: true }
 
     } catch (error) {

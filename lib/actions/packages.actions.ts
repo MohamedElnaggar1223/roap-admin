@@ -113,8 +113,8 @@ export async function createPackage(data: {
                     )
             }
 
-            revalidatePath('/academy/programs')
-            revalidatePath('/academy/assessments')
+            revalidatePath('/academy/academy/programs')
+            revalidatePath('/academy/academy/assessments')
             return { data: newPackage, error: null }
         })
     } catch (error) {
@@ -230,8 +230,8 @@ export async function updatePackage(id: number, data: {
             }
         })
 
-        revalidatePath('/academy/programs')
-        revalidatePath('/academy/assessments')
+        revalidatePath('/academy/academy/programs')
+        revalidatePath('/academy/academy/assessments')
         return { success: true, error: null }
     } catch (error) {
         console.error('Error updating package:', error)

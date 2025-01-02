@@ -292,7 +292,7 @@ export async function updateAssessment(id: number, data: {
             ])
         })
 
-        revalidatePath('/academy/programs')
+        revalidatePath('/academy/academy/programs')
         return { success: true, field: null, error: null }
 
     } catch (error) {

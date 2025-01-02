@@ -1012,7 +1012,7 @@ export const addSports = async (sportsIds: number[]) => {
 
 		await Promise.all(sportsIds.map(async (id) => await db.insert(academicSport).values({ academicId: academy.id, sportId: id })))
 
-		revalidatePath('/academy/sports')
+		revalidatePath('/academy/academy/sports')
 	} catch (error) {
 		console.error('Error creating location:', error)
 		if ((error as any)?.code === '23505' && (error as any)?.constraint === 'branches_slug_unique') {
@@ -1058,7 +1058,7 @@ export const deleteSport = async (id: number) => {
 
 	await db.delete(academicSport).where(and(eq(academicSport.academicId, academy.id), eq(academicSport.sportId, id)))
 
-	revalidatePath('/academy/sports')
+	revalidatePath('/academy/academy/sports')
 }
 
 type UpdateAcademyDetailsInput = z.infer<typeof academyDetailsSchema> & {

@@ -717,7 +717,7 @@ export async function createProgram(data: {
         return { error: 'Failed to create program' }
     }
     finally {
-        revalidatePath('/academy/programs')
+        revalidatePath('/academy/academy/programs')
     }
 }
 
@@ -1272,7 +1272,7 @@ export async function updateProgram(id: number, data: {
             ])
         })
 
-        revalidatePath('/academy/programs')
+        revalidatePath('/academy/academy/programs')
         return { success: true, field: null }
 
     } catch (error) {
@@ -1292,7 +1292,7 @@ export async function deletePrograms(ids: number[]) {
         await db.delete(programs).where(eq(programs.id, id))
     ))
 
-    revalidatePath('/academy/programs')
+    revalidatePath('/academy/academy/programs')
     return { success: true }
 }
 
@@ -1326,7 +1326,7 @@ export async function createPackage(programId: number, data: {
                 id: packages.id,
             })
 
-        revalidatePath('/academy/programs')
+        revalidatePath('/academy/academy/programs')
         return { data: newPackage }
     } catch (error) {
         console.error('Error creating package:', error)
@@ -1360,7 +1360,7 @@ export async function updatePackage(id: number, data: {
             })
             .where(eq(packages.id, id))
 
-        revalidatePath('/academy/programs')
+        revalidatePath('/academy/academy/programs')
         return { success: true }
     } catch (error) {
         console.error('Error updating package:', error)
@@ -1377,7 +1377,7 @@ export async function deletePackage(id: number) {
 
     try {
         await db.delete(packages).where(eq(packages.id, id))
-        revalidatePath('/academy/programs')
+        revalidatePath('/academy/academy/programs')
         return { success: true }
     } catch (error) {
         console.error('Error deleting package:', error)

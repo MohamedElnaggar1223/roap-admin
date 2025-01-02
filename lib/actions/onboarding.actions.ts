@@ -573,7 +573,7 @@ export async function createOnboardingProgram(data: {
         return { error: 'Failed to create program' }
     }
     finally {
-        revalidatePath('/academy/programs')
+        revalidatePath('/academy/academy/programs')
     }
 }
 
@@ -763,7 +763,7 @@ export async function updateOnboardingProgram(id: number, data: {
             ])
         })
 
-        revalidatePath('/academy/programs')
+        revalidatePath('/academy/academy/programs')
         return { success: true }
 
     } catch (error) {

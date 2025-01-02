@@ -122,10 +122,10 @@ const AcademicsTable = ({ academics, selectedRows, onSelectRow, onSelectAll, han
 							<TableCell>{academic.status || 'pending'}</TableCell>
 							<TableCell>
 								<div className="flex space-x-2">
-									<Button variant="outline" className="flex items-center gap-2">
+									{/* <Button variant="outline" className="flex items-center gap-2">
 										<Edit className="h-4 w-4" />
 										Edit
-									</Button>
+									</Button> */}
 									<Button onClick={() => handleChange(academic.userId?.toString()!)} variant="outline" className="flex items-center gap-2">
 										<Eye className="h-4 w-4" />
 										View
