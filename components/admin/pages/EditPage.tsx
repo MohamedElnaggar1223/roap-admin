@@ -307,7 +307,7 @@ export default function EditPage({ page, pageId }: Props) {
 
                     <div className="space-y-4 max-w-7xl w-full space-x-2">
                         <Button
-                            disabled={loading || (form.getValues('title') === page?.title && !selectedImage.file)}
+                            disabled={loading || (form.getValues('title') === page?.title && !selectedImage.file && form.getValues('content') === page?.content && form.getValues('orderBy') === page?.page?.orderBy)}
                             type='submit'
                             variant="outline"
                             className='bg-main text-white hover:bg-main-hovered hover:text-white'
