@@ -1,8 +1,8 @@
 'use server'
 
-import { SQL, and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm'
+import { SQL, and, asc, desc, eq, gte, inArray, lte, notInArray, sql } from 'drizzle-orm'
 import { db } from '@/db'
-import { entryFeesHistory, academics, academicSport, academicTranslations, blockBranches, blockPrograms, blockPackages, blocks, blockSports, bookings, bookingSessions, branches, branchTranslations, coaches, media, packages, profiles, programs, sports, sportTranslations, users, coachSpokenLanguage, academicAthletic, branchFacility, branchSport, coachPackage, coachProgram, coachSport, promoCodes, schedules, wishlist } from '@/db/schema'
+import { entryFeesHistory, academics, academicSport, academicTranslations, blockBranches, blockPrograms, blockPackages, blocks, blockSports, bookings, bookingSessions, branches, branchTranslations, coaches, media, packages, profiles, programs, sports, sportTranslations, users, coachSpokenLanguage, academicAthletic, branchFacility, branchSport, coachPackage, coachProgram, coachSport, promoCodes, schedules, wishlist, reviews, notifications, packageDiscount, discounts } from '@/db/schema'
 // import { auth } from '../auth'
 import bcrypt from "bcryptjs";
 import { isAdmin } from '../admin'
@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { academySignUpSchema } from '../validations/auth';
 import { auth } from '@/auth';
 import { academyDetailsSchema } from '../validations/academies';
-import { deleteFromStorage, getImageUrl } from '../supabase-images';
+import { deleteFromStorage, getImageUrl } from '../supabase-images-server';
 import { getCoaches } from './coaches.actions';
 import { getLocations } from './locations.actions';
 import { getPrograms } from './programs.actions';
@@ -301,54 +301,84 @@ export async function getPaginatedAcademics(
 }
 
 async function collectImagesToDelete(academicIds: number[]) {
-	// Collect all image paths that need to be deleted
-	const [
-		academicImages,
-		mediaImages,
-		sportsImages,
-		coachImages,
-		branchMediaImages
-	] = await Promise.all([
-		// Get academic images
-		db
-			.select({ image: academics.image })
-			.from(academics)
-			.where(inArray(academics.id, academicIds)),
+	if (!academicIds?.length) return []
 
-		// Get media table images
-		db
-			.select({ url: media.url })
-			.from(media)
-			.where(inArray(media.referableId, academicIds)),
+	try {
+		const [
+			academicImages,
+			mediaImages,
+			sportsImages,
+			coachImages,
+			branchMediaImages
+		] = await Promise.all([
+			// Get academic images
+			db
+				.select({ image: academics.image })
+				.from(academics)
+				.where(and(
+					inArray(academics.id, academicIds),
+					notInArray(academics.image, [null, '', 'default.jpg'] as any)
+				)),
 
-		// Get sports images through academic_sport relation
-		db
-			.select({ image: sports.image })
-			.from(academicSport)
-			.innerJoin(sports, eq(sports.id, academicSport.sportId))
-			.where(inArray(academicSport.academicId, academicIds)),
+			// Get media table images
+			db
+				.select({ url: media.url })
+				.from(media)
+				.where(and(
+					inArray(media.referableId, academicIds),
+					notInArray(media.url, [null, ''] as any)
+				)),
 
-		// Get coach images
-		db
-			.select({ image: coaches.image })
-			.from(coaches)
-			.where(inArray(coaches.academicId, academicIds)),
+			// Get sports images through academic_sport relation
+			db
+				.select({ image: sports.image })
+				.from(academicSport)
+				.innerJoin(sports, eq(sports.id, academicSport.sportId))
+				.where(and(
+					inArray(academicSport.academicId, academicIds),
+					notInArray(sports.image, [null, '', 'default.jpg'] as any)
+				)),
 
-		// Get branch media images
-		db
-			.select({ url: media.url })
-			.from(media)
-			.innerJoin(branches, eq(branches.id, media.referableId))
-			.where(inArray(branches.academicId, academicIds))
-	])
+			// Get coach images
+			db
+				.select({ image: coaches.image })
+				.from(coaches)
+				.where(and(
+					inArray(coaches.academicId, academicIds),
+					notInArray(coaches.image, [null, '', 'default.jpg'] as any)
+				)),
 
-	return [
-		...academicImages.map(i => i.image),
-		...mediaImages.map(i => i.url),
-		...sportsImages.map(i => i.image),
-		...coachImages.map(i => i.image),
-		...branchMediaImages.map(i => i.url)
-	].filter(Boolean) as string[]
+			// Get branch media images
+			db
+				.select({ url: media.url })
+				.from(media)
+				.innerJoin(branches, eq(branches.id, media.referableId))
+				.where(and(
+					inArray(branches.academicId, academicIds),
+					notInArray(media.url, [null, ''] as any)
+				))
+		])
+
+		// Combine all images and filter out any remaining nulls or empty strings
+		const allImages = [
+			...academicImages.map(i => i.image),
+			...mediaImages.map(i => i.url),
+			...sportsImages.map(i => i.image),
+			...coachImages.map(i => i.image),
+			...branchMediaImages.map(i => i.url)
+		].filter((path: string | null) => {
+			return Boolean(path) && typeof path === 'string' &&
+				path.length > 0 &&
+				path !== 'default.jpg' &&
+				!path.startsWith('http')
+		})
+
+		// Remove duplicates
+		return [...new Set(allImages)]
+	} catch (error) {
+		console.error('Error collecting images to delete:', error)
+		return []
+	}
 }
 
 export const deleteAcademics = async (ids: number[]) => {
@@ -365,7 +395,7 @@ export const deleteAcademics = async (ids: number[]) => {
 
 		// Start a transaction to ensure all related deletions succeed or none do
 		await db.transaction(async (tx) => {
-			// 1. Handle booking related tables
+			// 1. First delete tables with no dependencies
 			await tx.delete(bookingSessions)
 				.where(inArray(bookingSessions.bookingId,
 					db.select({ id: bookings.id })
@@ -375,6 +405,15 @@ export const deleteAcademics = async (ids: number[]) => {
 						.where(inArray(programs.academicId, ids))
 				))
 
+			// 2. Delete media entries early as they're referenced by URL
+			await tx.delete(media)
+				.where(inArray(media.referableId, ids))
+
+			// 3. Delete notifications related to academics
+			await tx.delete(notifications)
+				.where(inArray(notifications.academicId, ids))
+
+			// 4. Delete bookings
 			await tx.delete(bookings)
 				.where(inArray(bookings.packageId,
 					db.select({ id: packages.id })
@@ -383,7 +422,15 @@ export const deleteAcademics = async (ids: number[]) => {
 						.where(inArray(programs.academicId, ids))
 				))
 
-			// 2. Delete coach related tables
+			// 5. Delete entry fees history
+			await tx.delete(entryFeesHistory)
+				.where(inArray(entryFeesHistory.programId,
+					db.select({ id: programs.id })
+						.from(programs)
+						.where(inArray(programs.academicId, ids))
+				))
+
+			// 6. Delete coach related tables
 			await tx.delete(coachSpokenLanguage)
 				.where(inArray(coachSpokenLanguage.coachId,
 					db.select({ id: coaches.id })
@@ -415,17 +462,18 @@ export const deleteAcademics = async (ids: number[]) => {
 			await tx.delete(coaches)
 				.where(inArray(coaches.academicId, ids))
 
-			// 3. Delete entry fees history records
-			await tx.delete(entryFeesHistory)
-				.where(inArray(entryFeesHistory.programId,
-					db.select({ id: programs.id })
-						.from(programs)
+			// 7. Delete schedule related tables
+			await tx.delete(schedules)
+				.where(inArray(schedules.packageId,
+					db.select({ id: packages.id })
+						.from(packages)
+						.innerJoin(programs, eq(packages.programId, programs.id))
 						.where(inArray(programs.academicId, ids))
 				))
 
-			// 4. Delete schedule and package related tables
-			await tx.delete(schedules)
-				.where(inArray(schedules.packageId,
+			// 8. Delete package related tables
+			await tx.delete(packageDiscount)
+				.where(inArray(packageDiscount.packageId,
 					db.select({ id: packages.id })
 						.from(packages)
 						.innerJoin(programs, eq(packages.programId, programs.id))
@@ -439,11 +487,19 @@ export const deleteAcademics = async (ids: number[]) => {
 						.where(inArray(programs.academicId, ids))
 				))
 
-			// 5. Delete programs
+			// 9. Delete discount records
+			await tx.delete(discounts)
+				.where(inArray(discounts.programId,
+					db.select({ id: programs.id })
+						.from(programs)
+						.where(inArray(programs.academicId, ids))
+				))
+
+			// 10. Delete programs
 			await tx.delete(programs)
 				.where(inArray(programs.academicId, ids))
 
-			// 6. Delete block related tables
+			// 11. Delete block related tables
 			await tx.delete(blockPrograms)
 				.where(inArray(blockPrograms.blockId,
 					db.select({ id: blocks.id })
@@ -475,11 +531,7 @@ export const deleteAcademics = async (ids: number[]) => {
 			await tx.delete(blocks)
 				.where(inArray(blocks.academicId, ids))
 
-			// 7. Delete media entries
-			await tx.delete(media)
-				.where(inArray(media.referableId, ids))
-
-			// 8. Delete branch related tables
+			// 12. Delete branch related tables
 			await tx.delete(branchSport)
 				.where(inArray(branchSport.branchId,
 					db.select({ id: branches.id })
@@ -501,10 +553,17 @@ export const deleteAcademics = async (ids: number[]) => {
 						.where(inArray(branches.academicId, ids))
 				))
 
+			await tx.delete(reviews)
+				.where(inArray(reviews.branchId,
+					db.select({ id: branches.id })
+						.from(branches)
+						.where(inArray(branches.academicId, ids))
+				))
+
 			await tx.delete(branches)
 				.where(inArray(branches.academicId, ids))
 
-			// 9. Delete remaining academic related tables
+			// 13. Delete remaining academic related tables
 			await tx.delete(academicAthletic)
 				.where(inArray(academicAthletic.academicId, ids))
 
@@ -520,13 +579,15 @@ export const deleteAcademics = async (ids: number[]) => {
 			await tx.delete(wishlist)
 				.where(inArray(wishlist.academicId, ids))
 
-			// 10. Finally, delete the academics
+			// 14. Finally, delete the academics
 			await tx.delete(academics)
 				.where(inArray(academics.id, ids))
 		})
 
 		// After successful database deletion, delete the files from storage
-		await deleteFromStorage(imagesToDelete)
+		if (imagesToDelete.length > 0) {
+			await deleteFromStorage(imagesToDelete as string[])
+		}
 
 		revalidatePath('/academics')
 
