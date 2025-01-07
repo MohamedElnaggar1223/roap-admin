@@ -22,6 +22,8 @@ export async function checkAcademyStatus() {
             ? parseInt(impersonatedId)
             : parseInt(session.user.id)
 
+        console.log("Academy ID", academicId)
+
         const academy = await db.query.academics.findFirst({
             where: eq(academics.userId, academicId),
             columns: {
@@ -29,6 +31,8 @@ export async function checkAcademyStatus() {
                 slug: true
             }
         })
+
+        console.log("Academy EEEEE", academy)
 
         function slugToText(slug: string) {
             return slug
@@ -45,6 +49,7 @@ export async function checkAcademyStatus() {
         if (!academy) {
             return {
                 shouldRedirect: false,
+                adminAcademy: true
             }
         }
 

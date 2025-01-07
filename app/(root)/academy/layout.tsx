@@ -20,6 +20,9 @@ import { OnboardingSaveProvider } from "@/providers/onboarding-save-provider";
 import { fetchPlaceInformation } from "@/lib/actions/reviews.actions";
 import { StoreProvider } from "@/providers/store-provider";
 import { DataPrefetcher } from "@/providers/data-prefetcher";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
@@ -33,9 +36,34 @@ export default async function RootLayout({
 	console.log(status)
 	console.log("status academy Id", status.academyId)
 
+	if (status.adminAcademy) {
+		return (
+			<html lang="en">
+				<body
+					className={cn(`antialiased bg-[#E0E4D9]`, inter.variable)}
+				>
+					<div className="flex items-center justify-center min-h-screen bg-[#E0E4D9]">
+						<Card className="w-[350px]">
+							<CardHeader>
+								<CardTitle>Academy Selection Required</CardTitle>
+								<CardDescription>Please choose an academy to view first</CardDescription>
+							</CardHeader>
+							<CardContent>
+								<Button asChild className="w-full">
+									<Link href="/academics">Select an Academy</Link>
+								</Button>
+							</CardContent>
+						</Card>
+					</div>
+				</body>
+			</html>
+		)
+	}
+
 	if (status.shouldRedirect) {
 		redirect(status.redirectTo!)
 	}
+
 	// if (!status.isOnboarded) {
 	// 	redirect('/on-boarding')
 	// }
