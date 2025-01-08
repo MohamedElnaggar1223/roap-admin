@@ -25,6 +25,7 @@ import {
 	Edit,
 	Eye,
 	Loader2,
+	SearchIcon,
 	Trash2Icon,
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -34,6 +35,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { startImpersonation, stopImpersonation } from '@/lib/actions/impersonations.actions'
+import { useDebouncedCallback } from 'use-debounce'
+import { Input } from '@/components/ui/input'
 
 type Academic = {
 	id: number
@@ -91,6 +94,9 @@ const AcademicsTable = ({ academics, selectedRows, onSelectRow, onSelectAll, han
 				<TableHeader>
 					<TableRow>
 						<TableHead className="w-12">
+							#
+						</TableHead>
+						<TableHead className="w-12">
 							<Checkbox
 								checked={selectedRows.length === academics.length && academics.length > 0}
 								onCheckedChange={onSelectAll}
@@ -106,8 +112,9 @@ const AcademicsTable = ({ academics, selectedRows, onSelectRow, onSelectAll, han
 					</TableRow>
 				</TableHeader>
 				<TableBody>
-					{academics.map((academic) => (
+					{academics.map((academic, index) => (
 						<TableRow key={academic.id}>
+							<TableCell>{index + 1}</TableCell>
 							<TableCell>
 								<Checkbox
 									checked={selectedRows.includes(academic.id)}
@@ -201,6 +208,9 @@ export default function AcademicsContainer() {
 	const [activeTab, setActiveTab] = useState('all')
 	const [loading, setLoading] = useState(false)
 	const [refetch, setRefetch] = useState(false)
+	const [searchInput, setSearchInput] = useState('')
+	const [searchQuery, setSearchQuery] = useState('')
+	const [filteredAcademics, setFilteredAcademics] = useState<Academic[]>([])
 	const router = useRouter()
 
 	const fetchAcademics = (page: number, pageSize: number) => {
@@ -244,15 +254,43 @@ export default function AcademicsContainer() {
 		setBulkDeleteOpen(false)
 	}
 
-	const filteredAcademics = academics.filter(academy => {
+	useEffect(() => {
+		filterAcademics()
+	}, [academics, statusFilter, activeTab, searchQuery])
+
+	const debouncedSearch = useDebouncedCallback((value: string) => {
+		setSearchQuery(value)
+	}, 300)
+
+	const filterAcademics = () => {
+		let filtered = [...academics]
+
+		// Apply status filter
 		if (activeTab === 'onboarded') {
-			return academy.onboarded
+			filtered = filtered.filter(academy => academy.onboarded)
 		}
 		if (statusFilter !== 'all') {
-			return academy.status === statusFilter
+			filtered = filtered.filter(academy => academy.status === statusFilter)
 		}
-		return true
-	})
+
+		// Apply search query
+		if (searchQuery) {
+			const lowercasedValue = searchQuery.toLowerCase()
+			filtered = filtered.filter(academy =>
+				academy.slug?.toLowerCase().includes(lowercasedValue) ||
+				academy.description?.toLowerCase().includes(lowercasedValue) ||
+				academy.userName?.toLowerCase().includes(lowercasedValue)
+			)
+		}
+
+		setFilteredAcademics(filtered)
+	}
+
+	const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const value = e.target.value
+		setSearchInput(value)
+		debouncedSearch(value)
+	}
 
 	const handleChange = async (academyId: string) => {
 		try {
@@ -301,6 +339,16 @@ export default function AcademicsContainer() {
 							</Select>
 						</>
 					)}
+					<div className="relative">
+						<SearchIcon className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 peer-focus:text-gray-900" />
+						<Input
+							type="search"
+							placeholder="Search..."
+							value={searchInput}
+							onChange={handleSearchChange}
+							className="focus-visible:ring-2 bg-white focus-visible:ring-main pl-8 pr-4 py-2"
+						/>
+					</div>
 				</div>
 			</div>
 
