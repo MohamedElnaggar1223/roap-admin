@@ -3,7 +3,7 @@ import { db } from '@/db'
 import { branches, branchTranslations, branchFacility, branchSport, programs, reviews } from '@/db/schema'
 import { auth } from '@/auth'
 import { and, eq, inArray, not, sql } from 'drizzle-orm'
-import { revalidateTag, unstable_cache } from 'next/cache'
+import { revalidatePath, revalidateTag, unstable_cache } from 'next/cache'
 import { slugify } from '../utils'
 import { cookies } from 'next/headers'
 import { fetchPlaceInformation, getPlaceId } from './reviews.actions'
@@ -109,17 +109,37 @@ export async function getLocations() {
 }
 
 async function manageAssessmentPrograms(tx: any, branchId: number, academicId: number, sportIds: number[]) {
-    await tx.insert(programs).values(
-        sportIds.map(sportId => ({
-            name: 'Assessment',
-            type: 'TEAM',
-            academicId: academicId,
-            branchId: branchId,
-            sportId: sportId,
-            createdAt: sql`now()`,
-            updatedAt: sql`now()`
-        }))
-    )
+    const existingPrograms = await tx
+        .select({ branchId: programs.branchId, sportId: programs.sportId })
+        .from(programs)
+        .where(
+            and(
+                eq(programs.branchId, branchId),
+                inArray(programs.sportId, sportIds)
+            )
+        );
+
+    const existingCombinations = new Set(
+        existingPrograms.map((prog: any) => `${prog.branchId}-${prog.sportId}`)
+    );
+
+    const newSportIds = sportIds.filter(
+        sportId => !existingCombinations.has(`${branchId}-${sportId}`)
+    );
+
+    if (newSportIds.length > 0) {
+        await tx.insert(programs).values(
+            newSportIds.map(sportId => ({
+                name: 'Assessment',
+                type: 'TEAM',
+                academicId: academicId,
+                branchId: branchId,
+                sportId: sportId,
+                createdAt: sql`now()`,
+                updatedAt: sql`now()`
+            }))
+        );
+    }
 }
 
 export async function createLocation(data: {
@@ -446,7 +466,7 @@ export async function updateLocation(id: number, data: {
                     .where(and(
                         eq(programs.branchId, id),
                         inArray(programs.sportId, sportsToRemove),
-                        eq(programs.type, 'assessment')
+                        eq(programs.name, 'Assessment')
                     )) : Promise.resolve(),
             sportsToAdd.length > 0 ?
                 manageAssessmentPrograms(db, id, academy.id, sportsToAdd) : Promise.resolve()
@@ -499,6 +519,7 @@ export async function deleteLocations(ids: number[]) {
     await Promise.all(ids.map(async id => await db.delete(branches).where(eq(branches.id, id))))
 
     revalidateTag(`locations-${academy?.id}`)
+    revalidatePath('/academy/academy/assessment')
 
     return { success: true }
 }

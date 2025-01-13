@@ -6,7 +6,7 @@ import { entryFeesHistory, academics, academicSport, academicTranslations, block
 // import { auth } from '../auth'
 import bcrypt from "bcryptjs";
 import { isAdmin } from '../admin'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { z } from 'zod';
 import { academySignUpSchema } from '../validations/auth';
 import { auth } from '@/auth';
@@ -1217,6 +1217,21 @@ export async function updateAcademyDetails(data: UpdateAcademyDetailsInput) {
 					eq(academicTranslations.academicId, academy.id),
 					eq(academicTranslations.locale, 'en')
 				))
+
+			if (sportsToRemove.length > 0) {
+				// First remove the sport from all branches
+				await tx.delete(branchSport)
+					.where(inArray(branchSport.sportId, sportsToRemove))
+
+				// Then remove all assessments for this sport
+				await tx.delete(programs)
+					.where(and(
+						eq(programs.academicId, academy.id),
+						inArray(programs.sportId, sportsToRemove),
+					))
+
+				revalidateTag(`locations-${academy?.id}`)
+			}
 
 			await Promise.all([
 				sportsToRemove.length > 0 ?
