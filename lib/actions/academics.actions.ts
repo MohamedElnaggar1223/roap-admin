@@ -256,6 +256,7 @@ export async function getPaginatedAcademics(
 			name: sql<string>`t.name`,
 			description: sql<string>`t.description`,
 			locale: sql<string>`t.locale`,
+			hidden: academics.hidden,
 			createdAt: academics.createdAt,
 			onboarded: academics.onboarded,
 		})
@@ -1334,5 +1335,48 @@ export const getAcademySports = async () => {
 	return {
 		data,
 		error: null,
+	}
+}
+export const toggleAcademicHidden = async (id: number) => {
+	const isAdminRes = await isAdmin()
+
+	if (!isAdminRes) return {
+		error: 'You are not authorized to perform this action',
+	}
+
+	try {
+		// First get current hidden state
+		const academic = await db.query.academics.findFirst({
+			where: (academics, { eq }) => eq(academics.id, id),
+			columns: {
+				hidden: true
+			}
+		})
+
+		if (!academic) {
+			return { error: 'Academic not found' }
+		}
+
+		// Toggle the hidden state
+		await db.update(academics)
+			.set({
+				hidden: !academic.hidden,
+				updatedAt: sql`now()`
+			})
+			.where(eq(academics.id, id))
+
+		revalidatePath('/academics')
+
+		return {
+			error: null,
+			success: true,
+			newState: !academic.hidden
+		}
+	} catch (error) {
+		console.error('Error toggling academic hidden state:', error)
+		return {
+			error: 'Failed to toggle academic hidden state',
+			success: false
+		}
 	}
 }

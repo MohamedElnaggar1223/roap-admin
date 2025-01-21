@@ -12,6 +12,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import {
     Form,
     FormControl,
+    FormDescription,
     FormField,
     FormItem,
     FormLabel,
@@ -31,6 +32,9 @@ import { DateSelector } from '@/components/shared/date-selector';
 import { Package } from '@/stores/programs-store';
 import { useProgramsStore } from '@/providers/store-provider';
 import { v4 as uuid } from 'uuid';
+import { Switch } from '@/components/ui/switch';
+import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 const formatTimeValue = (value: string) => {
     if (!value) return '';
@@ -74,7 +78,7 @@ const packageSchema = z.object({
         required_error: "End date is required",
     }).optional(),
     months: z.array(z.string()).optional(),
-    memo: z.string(),
+    memo: z.string().optional(),
     entryFees: z.string().default("0"),
     entryFeesExplanation: z.string().optional(),
     entryFeesAppliedUntil: z.array(z.string()).default([]).optional(),
@@ -84,27 +88,96 @@ const packageSchema = z.object({
         day: z.string().min(1, "Day is required"),
         from: z.string().min(1, "Start time is required"),
         to: z.string().min(1, "End time is required"),
-        memo: z.string(),
-        id: z.number().optional()
+        memo: z.string().optional(),
+        id: z.number().optional(),
+        capacity: z.string().default("0"),
+        capacityType: z.enum(["normal", "unlimited"]).default("normal")
     })),
     capacity: z.string().default("0"),
-}).refine((data) => {
+    capacityType: z.enum(["normal", "unlimited"]).default("normal"),
+    flexible: z.boolean().default(false),
+    sessionPerWeek: z.string().transform(val => parseInt(val) || 0).optional(),
+    sessionDuration: z.string().transform(val => parseInt(val) || null).optional().nullable(),
+}).superRefine((data, ctx) => {
     if (parseFloat(data.entryFees) > 0 && !data.entryFeesExplanation) {
-        return false;
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Entry fees explanation is required when entry fees is set",
+            path: ["entryFeesExplanation"]
+        });
     }
+
     if (data.type === "Monthly" && parseFloat(data.entryFees) > 0 && data.entryFeesAppliedUntil?.length === 0) {
-        return false;
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Must select months for entry fees application",
+            path: ["entryFeesAppliedUntil"]
+        });
     }
+
     if (data.type === "Monthly" && (!data.months || data.months.length === 0)) {
-        return false;
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Must select at least one month",
+            path: ["months"]
+        });
     }
+
     if (data.type !== "Monthly" && (!data.startDate || !data.endDate)) {
-        return false;
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Start and end dates are required",
+            path: ["startDate"]
+        });
     }
-    return true;
-}, {
-    message: "Required fields missing",
-    path: ["months"]
+
+    if (data.flexible) {
+        // Check sessionPerWeek when package is flexible
+        if (!data.sessionPerWeek || data.sessionPerWeek <= 0) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Sessions per week is required and must be greater than 0",
+                path: ["sessionPerWeek"]
+            });
+        }
+
+        if ((data?.sessionPerWeek ?? 0) > data.schedules.length) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `Sessions per week cannot be greater than available schedules (${data.schedules.length})`,
+                path: ["sessionPerWeek"]
+            });
+        }
+
+        // Check sessionDuration when package is flexible
+        if (!data.sessionDuration) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Session duration is required for flexible packages",
+                path: ["sessionDuration"]
+            });
+        }
+
+        // Validate that all schedules have capacity when package is flexible
+        data.schedules.forEach((schedule, index) => {
+            if (schedule.capacityType === "normal" && !schedule?.capacity || schedule.capacity === 'NaN' || parseInt(schedule.capacity) <= 0) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: "Schedule capacity must be greater than 0",
+                    path: [`schedules.${index}.capacity`]
+                });
+            }
+        });
+    } else {
+        // When not flexible, validate package capacity
+        if (data.capacityType === "normal" && parseInt(data.capacity) <= 0) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Package capacity must be greater than 0",
+                path: ["capacity"]
+            });
+        }
+    }
 });
 
 interface Props {
@@ -143,6 +216,9 @@ const getMonthsInRange = (startDate: Date, endDate: Date) => {
 
 export default function AddPackage({ open, onOpenChange, programId }: Props) {
     const router = useRouter()
+
+    const { toast } = useToast()
+
     const { mutate } = useOnboarding()
     const [loading, setLoading] = useState(false)
     const [availableMonths, setAvailableMonths] = useState<Array<{ label: string, value: string }>>([])
@@ -161,11 +237,13 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
             price: '',
             memo: '',
             entryFees: '0',
-            schedules: [{ day: '', from: '', to: '', memo: '' }],
+            schedules: [{ day: '', from: '', to: '', memo: '', capacityType: 'normal' }],
             entryFeesStartDate: undefined,
             entryFeesEndDate: undefined,
             capacity: '0',
             months: [],
+            capacityType: 'normal',
+            flexible: program?.flexible ?? false,
         }
     })
 
@@ -173,6 +251,10 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
         control: form.control,
         name: "schedules"
     })
+
+    useEffect(() => {
+        form.setValue('flexible', program?.flexible ?? false)
+    }, [program])
 
     const packageType = form.watch("type")
     const entryFees = parseFloat(form.watch("entryFees") || "0")
@@ -210,9 +292,16 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
         }
     }, [startDate, endDate])
 
+    const capacityTypeChange = form.watch("capacityType")
+
+    useEffect(() => {
+        if (capacityTypeChange === 'normal') {
+            form.setValue('capacity', '0')
+        }
+    }, [capacityTypeChange])
+
     const onSubmit = async (values: z.infer<typeof packageSchema>) => {
         try {
-            console.log(programId)
             if (programId) {
                 setLoading(true)
                 const packageName = values.type === "Term" ?
@@ -229,6 +318,16 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                     startDate = dates.startDate;
                     endDate = dates.endDate;
                 }
+                else {
+                    if (!(startDate instanceof Date) || !(endDate instanceof Date)) {
+                        toast({
+                            title: "Start and End Dates are required",
+                            description: "Please select a start and end date",
+                            variant: "destructive",
+                        });
+                        return;
+                    }
+                }
 
                 addPackage({
                     name: packageName!,
@@ -238,7 +337,7 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                     endDate: endDate?.toLocaleString() ?? '',
                     months: values.months ?? [],
                     programId,
-                    memo: values.memo,
+                    memo: values.memo ?? '',
                     entryFees: parseFloat(values.entryFees),
                     entryFeesExplanation: showEntryFeesFields ? values.entryFeesExplanation ?? '' : null,
                     entryFeesAppliedUntil: values.type === "Monthly" && showEntryFeesFields ?
@@ -251,15 +350,19 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                         day: schedule.day,
                         from: schedule.from,
                         to: schedule.to,
-                        memo: schedule.memo,
+                        memo: schedule.memo ?? '',
+                        capacity: values.flexible ?
+                            (schedule.capacityType === "unlimited" ? 9999 : parseInt(schedule.capacity)) :
+                            (values.capacityType === "unlimited" ? 9999 : parseInt(values.capacity)),
                         id: undefined,
                         createdAt: new Date().toLocaleString(),
                         updatedAt: new Date().toLocaleString(),
                         packageId: undefined
                     })),
-                    capacity: parseInt(values.capacity),
-                    sessionPerWeek: 0,
-                    sessionDuration: 60,
+                    capacity: values.flexible ? null : (values.capacityType === "unlimited" ? 9999 : parseInt(values.capacity)),
+                    // flexible: values.flexible,
+                    sessionPerWeek: values.flexible ? (values.sessionPerWeek ?? 0) : values.schedules.length,
+                    sessionDuration: values.flexible ? (values.sessionDuration ?? 0) : null,
                     createdAt: new Date().toLocaleString(),
                     updatedAt: new Date().toLocaleString(),
                 })
@@ -279,6 +382,102 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
         }
     }
 
+    const sessionDurationChange = form.watch('sessionDuration')
+
+    useEffect(() => {
+        if (program?.flexible) {
+            form.setValue('schedules', form.getValues('schedules').map(s => {
+                const duration = form.watch("sessionDuration");
+                const [hours, minutes] = s.from.split(':').map(Number);
+                const startDate = new Date();
+                startDate.setHours(hours, minutes, 0);
+                const endDate = new Date(startDate.getTime() + (duration ?? 0) * 60000);
+                const to = `${endDate.getHours().toString().padStart(2, '0')}:${endDate.getMinutes().toString().padStart(2, '0')}`;
+                return {
+                    ...s,
+                    to
+                }
+            }))
+        }
+    }, [sessionDurationChange])
+
+    const handleToastValidation = () => {
+        const values = form.getValues()
+        const missingFields: string[] = [];
+
+        // Check basic fields
+        if (!values.type) missingFields.push('Package Type');
+        if (!values.price) missingFields.push('Price');
+        if (values.type === 'Term' && !values.termNumber) missingFields.push('Term Number');
+
+        // Check dates/months based on package type
+        if (values.type === 'Monthly') {
+            if (!values.months || values.months.length === 0) missingFields.push('Months');
+        } else {
+            if (!values.startDate) missingFields.push('Start Date');
+            if (!values.endDate) missingFields.push('End Date');
+        }
+
+        // Entry fees validation
+        const entryFees = parseFloat(values.entryFees || '0');
+        if (entryFees > 0) {
+            if (!values.entryFeesExplanation) missingFields.push('Entry Fees Explanation');
+            if (values.type === 'Monthly' && (!values.entryFeesAppliedUntil || values.entryFeesAppliedUntil.length === 0)) {
+                missingFields.push('Entry Fees Applied For');
+            }
+            if (values.type !== 'Monthly') {
+                if (!values.entryFeesStartDate) missingFields.push('Entry Fees Start Date');
+                if (!values.entryFeesEndDate) missingFields.push('Entry Fees End Date');
+            }
+        }
+
+        // Sessions validation
+        if (!values.schedules || values.schedules.length === 0) {
+            missingFields.push('Sessions');
+        } else {
+            values.schedules.forEach((schedule, index) => {
+                if (!schedule.day) missingFields.push(`Session ${index + 1} Day`);
+                if (!schedule.from) missingFields.push(`Session ${index + 1} Start Time`);
+                if (!schedule.to) missingFields.push(`Session ${index + 1} End Time`);
+
+                // Flexible package specific validations
+                if (program?.flexible) {
+                    if (schedule.capacityType === 'normal' && (!schedule.capacity || parseInt(schedule.capacity) <= 0)) {
+                        missingFields.push(`Session ${index + 1} Capacity`);
+                    }
+                }
+            });
+        }
+
+        // Flexible package validations
+        if (program?.flexible) {
+            if (!values.sessionPerWeek || values.sessionPerWeek <= 0) {
+                missingFields.push('Sessions Per Week');
+            }
+            if (!values.sessionDuration) {
+                missingFields.push('Session Duration');
+            }
+            if (values.sessionPerWeek && values.sessionPerWeek > values.schedules.length) {
+                missingFields.push('Sessions Per Week (cannot be greater than available schedules)');
+            }
+        } else {
+            // Regular package capacity validation
+            if (values.capacityType === 'normal' && (!values.capacity || parseInt(values.capacity) <= 0)) {
+                missingFields.push('Package Capacity');
+            }
+        }
+
+        console.log('Missing fields:', missingFields);
+        if (missingFields.length > 0) {
+            toast({
+                title: "Missing Required Fields",
+                description: `Please fill in the following required fields: ${missingFields.join(', ')}`,
+                variant: "destructive",
+            });
+            return;
+        }
+    };
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className='bg-main-white min-w-[820px]'>
@@ -287,7 +486,7 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                         <DialogHeader className='flex flex-row pr-6 text-center items-center justify-between gap-2'>
                             <DialogTitle className='font-normal text-base'>New Package</DialogTitle>
                             <div className='flex items-center gap-2'>
-                                <button disabled={loading} type='submit' className='flex disabled:opacity-60 items-center justify-center gap-1 rounded-3xl text-main-yellow bg-main-green px-4 py-2.5'>
+                                <button onClick={handleToastValidation} disabled={loading} type='submit' className='flex disabled:opacity-60 items-center justify-center gap-1 rounded-3xl text-main-yellow bg-main-green px-4 py-2.5'>
                                     {loading && <Loader2 className='h-5 w-5 animate-spin' />}
                                     Create
                                 </button>
@@ -300,7 +499,7 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                                     name="type"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>Type</FormLabel>
+                                            <FormLabel>Type <span className='text-xs text-red-500'>*</span></FormLabel>
                                             <Select onValueChange={field.onChange} defaultValue={field.value}>
                                                 <FormControl>
                                                     <SelectTrigger className='px-2 py-6 rounded-[10px] border border-gray-500 font-inter'>
@@ -324,7 +523,7 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                                         name="termNumber"
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel>Term Number</FormLabel>
+                                                <FormLabel>Term Number <span className='text-xs text-red-500'>*</span></FormLabel>
                                                 <FormControl>
                                                     <div className="flex items-center">
                                                         <span className="px-2 py-3.5 text-sm bg-transparent border border-r-0 border-gray-500 rounded-l-[10px]">Term</span>
@@ -341,7 +540,7 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                                         name="name"
                                         render={({ field }) => (
                                             <FormItem className='absolute hidden'>
-                                                <FormLabel>Name</FormLabel>
+                                                <FormLabel>Name <span className='text-xs text-red-500'>*</span></FormLabel>
                                                 <FormControl>
                                                     <Input {...field} className='px-2 py-6 rounded-[10px] border border-gray-500 font-inter' />
                                                 </FormControl>
@@ -350,6 +549,136 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                                         )}
                                     />
                                 ) : null}
+
+                                <div className="space-y-4">
+                                    <FormField
+                                        control={form.control}
+                                        name="flexible"
+                                        render={({ field }) => (
+                                            <FormItem className="absolute hidden flex-row items-center justify-between rounded-lg border p-4">
+                                                <div className="space-y-0.5">
+                                                    <FormLabel className="text-base">Flexible Schedule</FormLabel>
+                                                    <FormDescription>
+                                                        Allow students to choose which days they want to attend
+                                                    </FormDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Switch
+                                                        checked={field.value}
+                                                        onCheckedChange={field.onChange}
+                                                    />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    {program?.flexible ? (
+                                        <div className="space-y-4">
+                                            <FormField
+                                                control={form.control}
+                                                name="sessionPerWeek"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Sessions Per Week <span className='text-xs text-red-500'>*</span></FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                {...field}
+                                                                type="number"
+                                                                min="1"
+                                                                max={fields.length}
+                                                                className="px-2 py-6 rounded-[10px] border border-gray-500 font-inter"
+                                                                value={field.value || ''} // Convert 0 to empty string
+                                                                onChange={(e) => {
+                                                                    const value = parseInt(e.target.value) || 0;
+                                                                    field.onChange(value.toString());
+                                                                }}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+
+                                            <FormField
+                                                control={form.control}
+                                                name="sessionDuration"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Session Duration (minutes) <span className='text-xs text-red-500'>*</span></FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                {...field}
+                                                                type="number"
+                                                                min="1"
+                                                                className="px-2 py-6 rounded-[10px] border border-gray-500 font-inter"
+                                                                value={field.value || ''} // Convert null to empty string
+                                                                onChange={(e) => {
+                                                                    const value = e.target.value ? parseInt(e.target.value) : null;
+                                                                    field.onChange(value?.toString());
+                                                                }}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            <div className="flex gap-4">
+                                                <FormField
+                                                    control={form.control}
+                                                    name="capacity"
+                                                    render={({ field }) => (
+                                                        <FormItem className="flex-1">
+                                                            <FormLabel>Package Capacity <span className='text-xs text-red-500'>*</span></FormLabel>
+                                                            <FormControl>
+                                                                <Input
+                                                                    {...field}
+                                                                    type="number"
+                                                                    min="1"
+                                                                    disabled={capacityTypeChange === "unlimited"}
+                                                                    className={cn("px-2 py-6 rounded-[10px] border border-gray-500 font-inter", capacityTypeChange === "unlimited" && 'text-transparent')}
+                                                                />
+                                                            </FormControl>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}
+                                                />
+
+                                                <FormField
+                                                    control={form.control}
+                                                    name="capacityType"
+                                                    render={({ field }) => (
+                                                        <FormItem className="w-[200px]">
+                                                            <FormLabel>Capacity Type</FormLabel>
+                                                            <Select
+                                                                onValueChange={(value) => {
+                                                                    field.onChange(value);
+                                                                    if (value === "unlimited") {
+                                                                        form.setValue("capacity", "9999");
+                                                                    }
+                                                                }}
+                                                                value={field.value}
+                                                            >
+                                                                <FormControl>
+                                                                    <SelectTrigger className="px-2 py-6 rounded-[10px] border border-gray-500 font-inter">
+                                                                        <SelectValue placeholder="Select type" />
+                                                                    </SelectTrigger>
+                                                                </FormControl>
+                                                                <SelectContent className="!bg-[#F1F2E9]">
+                                                                    <SelectItem value="normal">Slots</SelectItem>
+                                                                    <SelectItem value="unlimited">Unlimited</SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
 
                                 <FormField
                                     control={form.control}
@@ -368,26 +697,10 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                                     )}
                                 />
 
-                                <FormField
-                                    control={form.control}
-                                    name="capacity"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Capacity</FormLabel>
-                                            <FormControl>
-                                                <div className="flex items-center">
-                                                    <Input {...field} type="number" min="0" step="1" className='px-2 py-6 rounded-[10px] border border-gray-500 font-inter' />
-                                                </div>
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-
                                 {packageType === "Monthly" ? (
                                     <div className="space-y-4">
                                         <div className="flex justify-between items-center">
-                                            <FormLabel>Package Months</FormLabel>
+                                            <FormLabel>Package Months <span className='text-xs text-red-500'>*</span></FormLabel>
                                             <Button
                                                 type="button"
                                                 variant="outline"
@@ -462,7 +775,7 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                                             name="startDate"
                                             render={({ field }) => (
                                                 <FormItem className="flex-1">
-                                                    <FormLabel>Start Date</FormLabel>
+                                                    <FormLabel>Start Date <span className='text-xs text-red-500'>*</span></FormLabel>
                                                     <DateSelector field={field} />
                                                     <FormMessage />
                                                 </FormItem>
@@ -474,7 +787,7 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                                             name="endDate"
                                             render={({ field }) => (
                                                 <FormItem className="flex-1">
-                                                    <FormLabel>End Date</FormLabel>
+                                                    <FormLabel>End Date <span className='text-xs text-red-500'>*</span></FormLabel>
                                                     <DateSelector field={field} />
                                                     <FormMessage />
                                                 </FormItem>
@@ -488,7 +801,7 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                                     name="entryFees"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>Entry Fees</FormLabel>
+                                            <FormLabel>Entry Fees <span className='text-xs text-red-500'>(All Prices Include VAT)</span></FormLabel>
                                             <FormControl>
                                                 <div className="flex items-center">
                                                     <span className="px-2 py-3.5 text-sm bg-transparent border border-r-0 border-gray-500 rounded-l-[10px]">AED</span>
@@ -512,7 +825,7 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                                         name="entryFeesExplanation"
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel>Entry Fees Explanation</FormLabel>
+                                                <FormLabel>Entry Fees Explanation <span className='text-xs text-red-500'>*</span></FormLabel>
                                                 <FormControl>
                                                     <Textarea
                                                         {...field}
@@ -533,7 +846,7 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                                             name="entryFeesStartDate"
                                             render={({ field }) => (
                                                 <FormItem className="flex-1">
-                                                    <FormLabel>Entry Fees Start Date</FormLabel>
+                                                    <FormLabel>Entry Fees Start Date <span className='text-xs text-red-500'>*</span></FormLabel>
                                                     <DateSelector field={field} />
                                                     <FormMessage />
                                                 </FormItem>
@@ -545,7 +858,7 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                                             name="entryFeesEndDate"
                                             render={({ field }) => (
                                                 <FormItem className="flex-1">
-                                                    <FormLabel>Entry Fees End Date</FormLabel>
+                                                    <FormLabel>Entry Fees End Date <span className='text-xs text-red-500'>*</span></FormLabel>
                                                     <DateSelector field={field} />
                                                     <FormMessage />
                                                 </FormItem>
@@ -560,7 +873,7 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                                         name="entryFeesAppliedUntil"
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel>Entry Fees Applied For</FormLabel>
+                                                <FormLabel>Entry Fees Applied For <span className='text-xs text-red-500'>*</span></FormLabel>
                                                 <div className="grid grid-cols-3 gap-4 border rounded-[10px] p-4">
                                                     {form.getValues('months')?.map((month) => (
                                                         <label
@@ -589,16 +902,7 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
 
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center">
-                                        <FormLabel>Sessions</FormLabel>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="text-main-green"
-                                            onClick={() => append({ day: '', from: '', to: '', memo: '' })}
-                                        >
-                                            Add Session
-                                        </Button>
+                                        <FormLabel>Sessions <span className='text-xs text-red-500'>*</span></FormLabel>
                                     </div>
 
                                     {fields.map((field, index) => (
@@ -652,15 +956,19 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                                                                     value={formatTimeValue(field.value)}
                                                                     onChange={(e) => {
                                                                         const newValue = e.target.value;
-                                                                        // Only update if it's a valid time format
                                                                         if (newValue === '' || /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(newValue)) {
                                                                             field.onChange(newValue);
+                                                                            // If package is flexible, automatically calculate and set 'to' time
+                                                                            if (program?.flexible && newValue && form.watch("sessionDuration")) {
+                                                                                const duration = form.watch("sessionDuration");
+                                                                                const [hours, minutes] = newValue.split(':').map(Number);
+                                                                                const startDate = new Date();
+                                                                                startDate.setHours(hours, minutes, 0);
+                                                                                const endDate = new Date(startDate.getTime() + (duration ?? 0) * 60000);
+                                                                                const to = `${endDate.getHours().toString().padStart(2, '0')}:${endDate.getMinutes().toString().padStart(2, '0')}`;
+                                                                                form.setValue(`schedules.${index}.to`, to);
+                                                                            }
                                                                         }
-                                                                    }}
-                                                                    onBlur={(e) => {
-                                                                        // Format on blur to ensure consistent value
-                                                                        field.onChange(formatTimeValue(e.target.value));
-                                                                        field.onBlur();
                                                                     }}
                                                                     className="px-2 py-6 rounded-[10px] border border-gray-500 font-inter"
                                                                 />
@@ -682,31 +990,82 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                                                                     type="time"
                                                                     value={formatTimeValue(field.value)}
                                                                     onChange={(e) => {
-                                                                        const newValue = e.target.value;
-                                                                        // Only update if it's a valid time format
-                                                                        if (newValue === '' || /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(newValue)) {
-                                                                            field.onChange(newValue);
+                                                                        if (!program?.flexible) {
+                                                                            const newValue = e.target.value;
+                                                                            if (newValue === '' || /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(newValue)) {
+                                                                                field.onChange(newValue);
+                                                                            }
                                                                         }
                                                                     }}
-                                                                    onBlur={(e) => {
-                                                                        // Format on blur to ensure consistent value
-                                                                        field.onChange(formatTimeValue(e.target.value));
-                                                                        field.onBlur();
-                                                                    }}
-                                                                    className="px-2 py-6 rounded-[10px] border border-gray-500 font-inter"
+                                                                    disabled={program?.flexible}
+                                                                    className="px-2 py-6 rounded-[10px] border border-gray-500 font-inter disabled:opacity-50"
                                                                 />
                                                             </FormControl>
                                                             <FormMessage />
                                                         </FormItem>
                                                     )}
                                                 />
+                                                {program?.flexible && (
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <FormField
+                                                            control={form.control}
+                                                            name={`schedules.${index}.capacity`}
+                                                            render={({ field }) => (
+                                                                <FormItem>
+                                                                    <FormLabel>Session Capacity <span className='text-xs text-red-500'>*</span></FormLabel>
+                                                                    <FormControl>
+                                                                        <Input
+                                                                            {...field}
+                                                                            type="number"
+                                                                            min="1"
+                                                                            disabled={form.watch(`schedules.${index}.capacityType`) === "unlimited"}
+                                                                            className={cn("px-2 py-6 rounded-[10px] border border-gray-500 font-inter", form.watch(`schedules.${index}.capacityType`) === "unlimited" && 'text-transparent')}
+                                                                            required={program?.flexible}
+                                                                        />
+                                                                    </FormControl>
+                                                                    <FormMessage />
+                                                                </FormItem>
+                                                            )}
+                                                        />
+
+                                                        <FormField
+                                                            control={form.control}
+                                                            name={`schedules.${index}.capacityType`}
+                                                            render={({ field }) => (
+                                                                <FormItem>
+                                                                    <FormLabel>Capacity Type</FormLabel>
+                                                                    <Select
+                                                                        onValueChange={(value) => {
+                                                                            field.onChange(value);
+                                                                            if (value === "unlimited") {
+                                                                                form.setValue(`schedules.${index}.capacity`, "9999");
+                                                                            }
+                                                                        }}
+                                                                        value={field.value}
+                                                                    >
+                                                                        <FormControl>
+                                                                            <SelectTrigger className="px-2 py-6 rounded-[10px] border border-gray-500 font-inter">
+                                                                                <SelectValue placeholder="Select type" />
+                                                                            </SelectTrigger>
+                                                                        </FormControl>
+                                                                        <SelectContent className="!bg-[#F1F2E9]">
+                                                                            <SelectItem value="normal">Slots</SelectItem>
+                                                                            <SelectItem value="unlimited">Unlimited</SelectItem>
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                    <FormMessage />
+                                                                </FormItem>
+                                                            )}
+                                                        />
+                                                    </div>
+                                                )}
                                             </div>
 
                                             <FormField
                                                 control={form.control}
                                                 name={`schedules.${index}.memo`}
                                                 render={({ field }) => (
-                                                    <FormItem>
+                                                    <FormItem className=''>
                                                         <FormLabel>Memo</FormLabel>
                                                         <FormControl>
                                                             <Textarea
@@ -720,6 +1079,15 @@ export default function AddPackage({ open, onOpenChange, programId }: Props) {
                                             />
                                         </div>
                                     ))}
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="rounded-3xl text-main-yellow bg-main-green px-4 py-5 hover:bg-main-green hover:text-main-yellow w-full text-sm"
+                                        onClick={() => append({ day: '', from: '', to: '', memo: '', capacity: '', capacityType: 'normal' })}
+                                    >
+                                        Add Session
+                                    </Button>
                                 </div>
                             </div>
                         </div>

@@ -414,6 +414,7 @@ export const academics = pgTable("academics", {
     extra: varchar({ length: 255 }).default(sql`NULL`),
     status: status().default('pending'),
     onboarded: boolean().default(false).notNull(),
+    hidden: boolean().default(false).notNull(),
 }, (table) => {
     return {
         slugUnique: uniqueIndex("academics_slug_unique").using("btree", table.slug.asc().nullsLast().op("text_ops")),

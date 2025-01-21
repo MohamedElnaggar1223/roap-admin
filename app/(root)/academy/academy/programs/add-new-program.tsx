@@ -2,7 +2,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { createProgram } from '@/lib/actions/programs.actions';
-import { Loader2, Plus, X } from 'lucide-react';
+import { Copy, Loader2, Plus, X } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
@@ -13,6 +13,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import {
     Form,
     FormControl,
+    FormDescription,
     FormField,
     FormItem,
     FormLabel,
@@ -41,9 +42,11 @@ import AutoGrowingTextarea from '@/components/ui/autogrowing-textarea';
 import { useOnboarding } from '@/providers/onboarding-provider';
 import AddDiscount from './add-discount';
 import EditDiscount from './edit-discount';
-import { useProgramsStore } from '@/providers/store-provider';
+import { useGendersStore, useProgramsStore } from '@/providers/store-provider';
 import { v4 as uuid } from 'uuid';
 import { Discount, Package } from '@/stores/programs-store';
+import { Switch } from '@/components/ui/switch';
+import { useToast } from '@/hooks/use-toast';
 
 const addProgramSchema = z.object({
     name: z.string().min(1, "Name is required"),
@@ -57,6 +60,7 @@ const addProgramSchema = z.object({
     numberOfSeats: z.string().optional(),
     type: z.enum(["TEAM", "PRIVATE"]),
     color: z.string().min(1, "Color is required"),
+    flexible: z.boolean().default(false),
 })
 
 interface Branch {
@@ -93,7 +97,7 @@ const ColorSelector = ({ form, takenColors, disabled = false }: { form: any; tak
             name="color"
             render={({ field }) => (
                 <FormItem className='flex-1'>
-                    <FormLabel>Color</FormLabel>
+                    <FormLabel>Color <span className='text-xs text-red-500'>*</span></FormLabel>
                     <div className="flex items-center gap-2">
                         <Select
                             disabled={disabled}
@@ -137,6 +141,7 @@ const ColorSelector = ({ form, takenColors, disabled = false }: { form: any; tak
 };
 
 const calendarColors = [
+    // Original colors
     { name: 'Olive Green', value: '#DCE5AE', textColor: '#000000' },
     { name: 'Lavender', value: '#E6E6FA', textColor: '#000000' },
     { name: 'Sky Blue', value: '#87CEEB', textColor: '#000000' },
@@ -147,7 +152,57 @@ const calendarColors = [
     { name: 'Thistle', value: '#D8BFD8', textColor: '#000000' },
     { name: 'Powder Blue', value: '#B0E0E6', textColor: '#000000' },
     { name: 'Pale Green', value: '#98FB98', textColor: '#000000' },
-    { name: 'Light Pink', value: '#FFB6C1', textColor: '#000000' }
+    { name: 'Light Pink', value: '#FFB6C1', textColor: '#000000' },
+    { name: 'Apricot', value: '#FFE5B4', textColor: '#000000' },
+    { name: 'Sea Green', value: '#98D8C1', textColor: '#000000' },
+    { name: 'Periwinkle', value: '#CCCCFF', textColor: '#000000' },
+    { name: 'Wheat', value: '#F5DEB3', textColor: '#000000' },
+    { name: 'Light Cyan', value: '#E0FFFF', textColor: '#000000' },
+    { name: 'Rose Dust', value: '#FFC0CB', textColor: '#000000' },
+    { name: 'Pale Turquoise', value: '#AFEEEE', textColor: '#000000' },
+    { name: 'Champagne', value: '#F7E7CE', textColor: '#000000' },
+    { name: 'Sage', value: '#BCB88A', textColor: '#000000' },
+    // Additional colors
+    { name: 'Baby Blue', value: '#89CFF0', textColor: '#000000' },
+    { name: 'Pale Rose', value: '#FFE4E1', textColor: '#000000' },
+    { name: 'Honeydew', value: '#F1FFF1', textColor: '#000000' }, // Modified
+    { name: 'Vanilla', value: '#F3E5AB', textColor: '#000000' },
+    { name: 'Soft Lilac', value: '#D8B2D1', textColor: '#000000' },
+    { name: 'Desert Sand', value: '#EDC9AF', textColor: '#000000' },
+    { name: 'Arctic Blue', value: '#B0E2FF', textColor: '#000000' },
+    { name: 'Pale Mauve', value: '#E0B0FF', textColor: '#000000' },
+    { name: 'Buttermilk', value: '#FFF1B5', textColor: '#000000' },
+    { name: 'Mint Cream', value: '#F6FFF6', textColor: '#000000' }, // Modified
+    { name: 'Dust Storm', value: '#E5CCC9', textColor: '#000000' },
+    { name: 'Pearl Aqua', value: '#88D8C0', textColor: '#000000' },
+    { name: 'Pale Slate', value: '#C3CDE6', textColor: '#000000' },
+    { name: 'Light Khaki', value: '#F0E68C', textColor: '#000000' },
+    { name: 'Misty Rose', value: '#FFE5E2', textColor: '#000000' }, // Modified
+    { name: 'Azure Mist', value: '#F1FFFF', textColor: '#000000' }, // Modified
+    { name: 'Pale Dogwood', value: '#EDCDC2', textColor: '#000000' },
+    { name: 'Crystal', value: '#A7D8DE', textColor: '#000000' },
+    { name: 'Almond', value: '#EFDECD', textColor: '#000000' },
+    { name: 'Morning Mist', value: '#E4E4E4', textColor: '#000000' },
+    { name: 'Beach Glass', value: '#C6E6E8', textColor: '#000000' },
+    { name: 'Milk Glass', value: '#F8F8FF', textColor: '#000000' },
+    { name: 'Buff', value: '#F0DC82', textColor: '#000000' },
+    { name: 'Shell Pink', value: '#FFB7C5', textColor: '#000000' },
+    { name: 'Water Lily', value: '#DED4E8', textColor: '#000000' },
+    { name: 'Sand Dollar', value: '#E8E8D0', textColor: '#000000' },
+    { name: 'Rain Cloud', value: '#D4DFE2', textColor: '#000000' },
+    { name: 'Pale Iris', value: '#E7E7FB', textColor: '#000000' }, // Modified
+    { name: 'Crepe', value: '#F2D8D8', textColor: '#000000' },
+    { name: 'Sea Salt', value: '#F7F7F7', textColor: '#000000' },
+    { name: 'Tea Green', value: '#D0F0C0', textColor: '#000000' },
+    { name: 'Rose Water', value: '#F6E6E8', textColor: '#000000' },
+    { name: 'Moon Glow', value: '#FCFEDA', textColor: '#000000' },
+    { name: 'Frost', value: '#E8F4F8', textColor: '#000000' },
+    { name: 'Pearl Pink', value: '#FADADD', textColor: '#000000' },
+    { name: 'Cloud White', value: '#F8F9FA', textColor: '#000000' },
+    { name: 'Sea Foam', value: '#99FF99', textColor: '#000000' }, // Modified
+    { name: 'Snow Drop', value: '#F2FFF2', textColor: '#000000' }, // Modified
+    { name: 'Dew', value: '#F0F8FF', textColor: '#000000' },
+    { name: 'Cotton Candy', value: '#FFBCD9', textColor: '#000000' }
 ];
 
 const calculateAgeFromDate = (birthDate: string) => {
@@ -214,6 +269,17 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
     const router = useRouter()
 
     const { mutate } = useOnboarding()
+    const { toast } = useToast()
+
+    const genders = useGendersStore((state) => state.genders).map((g) => g.name)
+    const fetched = useGendersStore((state) => state.fetched)
+    const fetchGenders = useGendersStore((state) => state.fetchGenders)
+
+    useEffect(() => {
+        if (!fetched) {
+            fetchGenders()
+        }
+    }, [fetched])
 
     const [addNewProgramOpen, setAddNewProgramOpen] = useState(false)
     const { data: coachesData } = useSWR(addNewProgramOpen ? 'coaches' : null, getAllCoaches)
@@ -238,6 +304,8 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
     const deletePackage = useProgramsStore((state) => state.deletePackage)
     const addTempProgram = useProgramsStore((state) => state.addTempProgram)
     const removeTempPrograms = useProgramsStore((state) => state.removeTempPrograms)
+    const triggerFlexibleChange = useProgramsStore((state) => state.triggerFlexibleChange)
+    const addPackage = useProgramsStore((state) => state.addPackage)
 
     const dateToAge = (date: Date) => {
         const today = new Date()
@@ -258,8 +326,9 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
             startAgeUnit: 'years',
             endAge: undefined,
             endAgeUnit: 'unlimited',
-            color: calendarColors[0].value,
-        }
+            color: '',
+            flexible: false,
+        },
     })
 
     useEffect(() => {
@@ -270,6 +339,7 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
                 branchId: 0,
                 sportId: 0,
                 gender: '',
+                flexible: false,
                 startDateOfBirth: new Date().toLocaleString(),
                 endDateOfBirth: new Date().toLocaleString(),
                 numberOfSeats: 0,
@@ -292,9 +362,11 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
         }
     }, [addNewProgramOpen])
 
+    const startAgeUnitChange = form.watch('startAgeUnit')
+    const endAgeUnitChange = form.watch('endAgeUnit')
+
     const onSubmit = async (values: z.infer<typeof addProgramSchema>) => {
         try {
-            // setLoading(true)
 
             if (!selectedGenders.length) return form.setError('root', {
                 type: 'custom',
@@ -327,6 +399,7 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
                 endDateOfBirth: endDate.toLocaleString(),
                 numberOfSeats: 0,
                 type: values.type,
+                flexible: values.flexible,
                 coachPrograms: selectedCoaches.map(coachId => ({ coach: { id: coachId }, id: parseInt(uuid().replace(/-/g, '')) })),
                 packages: program?.packages || [],
                 color: values.color,
@@ -381,7 +454,47 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
         )
     }
 
-    console.log("Edited Package Temp id", editedPackage?.editedPackage.tempId)
+    const flexibleChanged = form.watch('flexible')
+
+    useEffect(() => {
+        triggerFlexibleChange(flexibleChanged, programId)
+    }, [flexibleChanged])
+
+    const handleToastValidation = () => {
+        const values = form.getValues()
+
+        const missingFields: string[] = [];
+
+        if (!values.name) missingFields.push('Name');
+        if (!values.description) missingFields.push('Description');
+        if (!values.branchId) missingFields.push('Branch');
+        if (!values.sportId) missingFields.push('Sport');
+        if (!values.color) missingFields.push('Color');
+        if (!selectedGenders.length) missingFields.push('Gender');
+        if (!selectedCoaches.length) missingFields.push('Coaches');
+        if (values.startAge === undefined || values.startAge === null) missingFields.push('Start Age');
+        if (values.endAgeUnit !== 'unlimited' && (!values.endAge || values.endAge === undefined)) {
+            missingFields.push('End Age');
+        }
+
+        if (missingFields.length > 0) {
+            toast({
+                title: "Missing Required Fields",
+                description: `Please fill in the following required fields: ${missingFields.join(', ')}`,
+                variant: "destructive",
+            });
+            return;
+        }
+
+        if (!selectedGenders.length) {
+            toast({
+                title: "Gender Selection Required",
+                description: "Please select at least one gender for the program",
+                variant: "destructive",
+            });
+            return;
+        }
+    }
 
     return (
         <>
@@ -390,19 +503,19 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
                 New Program
             </button>
             <Dialog open={addNewProgramOpen} onOpenChange={setAddNewProgramOpen}>
-                <DialogContent className='bg-main-white min-w-[920px] max-w-[920px]'>
+                <DialogContent className='bg-main-white min-w-[920px] max-w-[920px] min-h-[650px]'>
                     <Form {...form}>
-                        <form onSubmit={form.handleSubmit(onSubmit)} className='flex flex-col gap-6 w-full'>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className='flex flex-col gap-6 w-full h-full min-h-[650px]'>
                             <DialogHeader className='flex flex-row pr-6 text-center items-center justify-between gap-2'>
                                 <DialogTitle className='font-normal text-base'>New Program</DialogTitle>
                                 <div className='flex items-center gap-2'>
-                                    <button disabled={loading} type='submit' className='flex disabled:opacity-60 items-center justify-center gap-1 rounded-3xl text-main-yellow bg-main-green px-4 py-2.5'>
+                                    <button onClick={handleToastValidation} disabled={loading} type='submit' className='flex disabled:opacity-60 items-center justify-center gap-1 rounded-3xl text-main-yellow bg-main-green px-4 py-2.5'>
                                         {loading && <Loader2 className='h-5 w-5 animate-spin' />}
                                         Create
                                     </button>
                                 </div>
                             </DialogHeader>
-                            <div className="w-full max-h-[380px] overflow-y-auto">
+                            <div className="w-full max-h-[650px] overflow-y-auto">
                                 <div className="flex flex-col gap-6 w-full px-2">
                                     <div className="flex w-full gap-4 items-start justify-between">
 
@@ -411,7 +524,7 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
                                             name='name'
                                             render={({ field }) => (
                                                 <FormItem className='flex-1'>
-                                                    <FormLabel>Name</FormLabel>
+                                                    <FormLabel>Name <span className='text-xs text-red-500'>*</span></FormLabel>
                                                     <FormControl>
                                                         <Input {...field} className='px-2 py-6 rounded-[10px] border border-gray-500 font-inter' />
                                                     </FormControl>
@@ -424,11 +537,34 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
                                             name='description'
                                             render={({ field }) => (
                                                 <FormItem className='flex-1'>
-                                                    <FormLabel>Description</FormLabel>
+                                                    <FormLabel>Description <span className='text-xs text-red-500'>*</span></FormLabel>
                                                     <FormControl>
                                                         <AutoGrowingTextarea field={{ ...field }} className='px-2 py-6 rounded-[10px] border border-gray-500 font-inter' />
                                                     </FormControl>
                                                     <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+                                    <div className="space-y-4 mt-4 mb-4">
+                                        <FormField
+                                            control={form.control}
+                                            name="flexible"
+                                            render={({ field }) => (
+                                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                                                    <div className="space-y-0.5">
+                                                        <FormLabel className="text-base">Flexible Schedule Program</FormLabel>
+                                                        <FormDescription>
+                                                            Allow program schedules to be flexible. All packages in this program will inherit this setting.
+                                                        </FormDescription>
+                                                    </div>
+                                                    <FormControl>
+                                                        <Switch
+                                                            checked={field.value}
+                                                            onCheckedChange={field.onChange}
+                                                            disabled={loading}
+                                                        />
+                                                    </FormControl>
                                                 </FormItem>
                                             )}
                                         />
@@ -441,7 +577,7 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
                                             name="branchId"
                                             render={({ field }) => (
                                                 <FormItem className='flex-1'>
-                                                    <FormLabel>Branch</FormLabel>
+                                                    <FormLabel>Branch <span className='text-xs text-red-500'>*</span></FormLabel>
                                                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                                                         <FormControl>
                                                             <SelectTrigger className='px-2 py-6 rounded-[10px] border border-gray-500 font-inter'>
@@ -462,7 +598,7 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
                                         />
 
                                         <div className="flex flex-col gap-4 flex-1">
-                                            <p className='text-xs'>For</p>
+                                            <p className='text-xs'>For <span className='text-xs text-red-500'>*</span></p>
                                             <div className="flex w-full flex-col gap-4 border border-gray-500 p-3 rounded-lg">
                                                 <div className="flex flex-wrap gap-2">
                                                     {selectedGenders.map((gender) => (
@@ -504,48 +640,16 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
                                                             }}
                                                         >
                                                             <div className="p-2">
-                                                                <p
-                                                                    key={'male'}
-                                                                    onClick={() => handleSelectGender('male')}
-                                                                    className="p-2 flex items-center justify-start gap-2 text-left cursor-pointer hover:bg-[#fafafa] rounded-lg"
-                                                                >
-                                                                    {selectedGenders.includes('male') && <X className="size-3" fill='#1f441f' />}
-                                                                    {'male'}
-                                                                </p>
-                                                                <p
-                                                                    key={'female'}
-                                                                    onClick={() => handleSelectGender('female')}
-                                                                    className="p-2 flex items-center justify-start gap-2 text-left cursor-pointer hover:bg-[#fafafa] rounded-lg"
-                                                                >
-                                                                    {selectedGenders.includes('female') && <X className="size-3" fill='#1f441f' />}
-                                                                    {'female'}
-                                                                </p>
-                                                                <p
-                                                                    key={'adults'}
-                                                                    onClick={() => handleSelectGender('adults')}
-                                                                    className="p-2 flex items-center justify-start gap-2 text-left cursor-pointer hover:bg-[#fafafa] rounded-lg"
-                                                                >
-                                                                    {selectedGenders.includes('adults') && <X className="size-3" fill='#1f441f' />}
-                                                                    {'adults'}
-                                                                </p>
-
-                                                                <p
-                                                                    key={'adults men'}
-                                                                    onClick={() => handleSelectGender('adults men')}
-                                                                    className="p-2 flex items-center justify-start gap-2 text-left cursor-pointer hover:bg-[#fafafa] rounded-lg"
-                                                                >
-                                                                    {selectedGenders.includes('adults men') && <X className="size-3" fill='#1f441f' />}
-                                                                    {'adults men'}
-                                                                </p>
-
-                                                                <p
-                                                                    key={'ladies only'}
-                                                                    onClick={() => handleSelectGender('ladies only')}
-                                                                    className="p-2 flex items-center justify-start gap-2 text-left cursor-pointer hover:bg-[#fafafa] rounded-lg"
-                                                                >
-                                                                    {selectedGenders.includes('ladies only') && <X className="size-3" fill='#1f441f' />}
-                                                                    {'ladies only'}
-                                                                </p>
+                                                                {genders.map(gender => (
+                                                                    <p
+                                                                        key={gender}
+                                                                        onClick={() => handleSelectGender(gender)}
+                                                                        className="p-2 flex items-center justify-start gap-2 text-left cursor-pointer hover:bg-[#fafafa] rounded-lg"
+                                                                    >
+                                                                        {selectedGenders.includes(gender) && <X className="size-3" fill='#1f441f' />}
+                                                                        {gender}
+                                                                    </p>
+                                                                ))}
                                                             </div>
                                                         </div>
                                                     </PopoverContent>
@@ -562,13 +666,13 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
                                                 name='startAge'
                                                 render={({ field }) => (
                                                     <FormItem className="flex flex-col flex-1">
-                                                        <FormLabel>Start Age</FormLabel>
+                                                        <FormLabel>Start Age <span className='text-xs text-red-500'>*</span></FormLabel>
                                                         <FormControl>
                                                             <Input
                                                                 type="number"
                                                                 {...field}
                                                                 onChange={e => field.onChange(Number(e.target.value))}
-                                                                step={0.5}
+                                                                step={startAgeUnitChange === 'months' ? 1 : 0.5}
                                                                 min={0}
                                                                 max={100}
                                                                 className='px-2 py-6 rounded-[10px] border border-gray-500 font-inter'
@@ -607,13 +711,13 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
                                                 name='endAge'
                                                 render={({ field }) => (
                                                     <FormItem className="flex flex-col flex-1">
-                                                        <FormLabel>End Age</FormLabel>
+                                                        <FormLabel>End Age <span className='text-xs text-red-500'>*</span></FormLabel>
                                                         <FormControl>
                                                             <Input
                                                                 type="number"
                                                                 {...field}
                                                                 onChange={e => field.onChange(Number(e.target.value))}
-                                                                step={0.5}
+                                                                step={endAgeUnitChange === 'months' ? 1 : 0.5}
                                                                 min={0.5}
                                                                 max={100}
                                                                 disabled={form.watch('endAgeUnit') === 'unlimited'}
@@ -651,7 +755,7 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
 
                                     <div className="flex w-full gap-4 items-start justify-between">
                                         <div className="flex flex-col gap-4 flex-1">
-                                            <p className='text-xs'>Coaches</p>
+                                            <p className='text-xs'>Coaches <span className='text-xs text-red-500'>*</span></p>
                                             <div className="flex w-full flex-col gap-4 border border-gray-500 p-3 rounded-lg">
                                                 <div className="flex flex-wrap gap-2">
                                                     {selectedCoaches.map((coach) => (
@@ -720,7 +824,7 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
                                             name="sportId"
                                             render={({ field }) => (
                                                 <FormItem className='flex-1'>
-                                                    <FormLabel>Sport</FormLabel>
+                                                    <FormLabel>Sport <span className='text-xs text-red-500'>*</span></FormLabel>
                                                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                                                         <FormControl>
                                                             <SelectTrigger className='px-2 py-6 rounded-[10px] border border-gray-500 font-inter'>
@@ -809,7 +913,7 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
                                             </div>
 
                                             {/* Rows */}
-                                            {program?.packages?.map((packageData, index) => (
+                                            {program?.packages?.filter(p => !p.deleted).map((packageData, index) => (
                                                 <Fragment key={index}>
                                                     <div className="py-4 px-2 bg-main-white flex items-center justify-center">
                                                         {!packageData.id && (
@@ -817,7 +921,7 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
                                                         )}
                                                     </div>
                                                     <div className="py-4 px-4 bg-main-white flex items-center justify-start font-bold font-inter">
-                                                        {packageData.name}
+                                                        {packageData.name.length > 10 ? packageData.name.substring(0, 10) + "..." : packageData.name}
                                                     </div>
                                                     <div className="py-4 px-4 bg-main-white flex items-center justify-start font-bold font-inter">
                                                         {packageData.price}
@@ -829,7 +933,7 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
                                                         {new Date(packageData.endDate).toLocaleDateString()}
                                                     </div>
                                                     <div className="py-4 px-4 bg-main-white flex items-center justify-start font-bold font-inter">
-                                                        {packageData.schedules.length}
+                                                        {packageData.schedules.length}{program.flexible && `, ${packageData.sessionPerWeek} per week ${packageData.sessionDuration ? `(${packageData.sessionDuration} minutes)` : ''}`}
                                                     </div>
                                                     <div className="py-4 px-4 bg-main-white gap-4 rounded-r-[20px] flex items-center justify-end font-bold font-inter">
                                                         <Button
@@ -847,6 +951,26 @@ export default function AddNewProgram({ branches, sports, academySports, takenCo
                                                                 width={20}
                                                                 height={20}
                                                             />
+                                                        </Button>
+                                                        <Button
+                                                            type='button'
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => {
+                                                                addPackage({
+                                                                    ...packageData,
+                                                                    id: undefined,
+                                                                    tempId: parseInt(uuid().split('-')[0], 16),
+                                                                    name: `${packageData.name}`,
+                                                                    schedules: packageData.schedules.map(schedule => ({
+                                                                        ...schedule,
+                                                                        id: undefined,
+                                                                        packageId: undefined
+                                                                    }))
+                                                                })
+                                                            }}
+                                                        >
+                                                            <Copy className="h-4 w-4" />
                                                         </Button>
                                                         <TrashIcon
                                                             className="h-4 w-4 cursor-pointer"

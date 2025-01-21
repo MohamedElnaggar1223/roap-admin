@@ -24,12 +24,13 @@ import {
 	ChevronsRightIcon,
 	Edit,
 	Eye,
+	EyeOff,
 	Loader2,
 	SearchIcon,
 	Trash2Icon,
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { acceptAcademic, deleteAcademics, getPaginatedAcademics, rejectAcademic } from '@/lib/actions/academics.actions'
+import { acceptAcademic, deleteAcademics, getPaginatedAcademics, rejectAcademic, toggleAcademicHidden } from '@/lib/actions/academics.actions'
 import { useRouter } from 'next/navigation'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -47,6 +48,7 @@ type Academic = {
 	userName: string | null
 	onboarded: boolean
 	status: 'pending' | 'accepted' | 'rejected' | null
+	hidden: boolean
 }
 
 type PaginationMeta = {
@@ -70,6 +72,7 @@ const AcademicsTable = ({ academics, selectedRows, onSelectRow, onSelectAll, han
 	const [rejectAcademicOpen, setRejectAcademicOpen] = useState(false)
 	const [rejectAcademicId, setRejectAcademicId] = useState<number | null>(null)
 	const [rejectAcademicLoading, setRejectAcademicLoading] = useState(false)
+	const [toggleVisibilityLoading, setToggleVisibilityLoading] = useState<number | null>(null)
 
 	const handleAcceptAcademic = async (academicId: number) => {
 		setAcceptAcademicLoading(academicId)
@@ -86,6 +89,18 @@ const AcademicsTable = ({ academics, selectedRows, onSelectRow, onSelectAll, han
 		setRejectAcademicLoading(false)
 		router.refresh()
 		setRefetch((prev) => !prev)
+	}
+
+	const handleToggleVisibility = async (academicId: number) => {
+		setToggleVisibilityLoading(academicId)
+		try {
+			await toggleAcademicHidden(academicId)
+			setRefetch(prev => !prev)
+		} catch (error) {
+			console.error('Error toggling visibility:', error)
+		} finally {
+			setToggleVisibilityLoading(null)
+		}
 	}
 
 	return (
@@ -136,6 +151,21 @@ const AcademicsTable = ({ academics, selectedRows, onSelectRow, onSelectAll, han
 									<Button onClick={() => handleChange(academic.userId?.toString()!)} variant="outline" className="flex items-center gap-2">
 										<Eye className="h-4 w-4" />
 										View
+									</Button>
+									<Button
+										onClick={() => handleToggleVisibility(academic.id)}
+										variant="outline"
+										className="flex items-center gap-2"
+										disabled={toggleVisibilityLoading === academic.id}
+									>
+										{toggleVisibilityLoading === academic.id ? (
+											<Loader2 className="h-4 w-4 animate-spin" />
+										) : academic.hidden ? (
+											<EyeOff className="h-4 w-4" />
+										) : (
+											<Eye className="h-4 w-4" />
+										)}
+										{academic.hidden ? 'Show' : 'Hide'}
 									</Button>
 									{academic.status === 'pending' && (
 										<>

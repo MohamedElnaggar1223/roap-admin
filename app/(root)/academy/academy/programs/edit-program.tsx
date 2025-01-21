@@ -2,7 +2,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { updateProgram } from '@/lib/actions/programs.actions';
-import { Loader2, Plus, X } from 'lucide-react';
+import { Copy, Eye, EyeOff, Loader2, Plus, X } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -13,6 +13,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import {
     Form,
     FormControl,
+    FormDescription,
     FormField,
     FormItem,
     FormLabel,
@@ -23,9 +24,7 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { getAllCoaches } from '@/lib/actions/coaches.actions';
-import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon } from 'lucide-react'
-import { format } from "date-fns"
+import { v4 as uuid } from 'uuid';
 import {
     Select,
     SelectContent,
@@ -44,7 +43,19 @@ import AddDiscount from './add-discount';
 import EditDiscount from './edit-discount';
 import { getProgramDiscounts } from '@/lib/actions/discounts.actions';
 import { Discount, Package, Program } from '@/stores/programs-store';
-import { useProgramsStore } from '@/providers/store-provider';
+import { useGendersStore, useProgramsStore } from '@/providers/store-provider';
+import { Switch } from '@/components/ui/switch';
+import { useToast } from '@/hooks/use-toast';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 const calculateAge = (birthDate: string): number => {
     const today = new Date();
@@ -84,6 +95,7 @@ const addProgramSchema = z.object({
     numberOfSeats: z.string().optional(),
     type: z.enum(["TEAM", "PRIVATE"]),
     color: z.string().min(1),
+    flexible: z.boolean(),
 })
 
 interface Branch {
@@ -121,7 +133,7 @@ const ColorSelector = ({ form, takenColors, disabled = false }: { form: any; tak
             name="color"
             render={({ field }) => (
                 <FormItem className='flex-1'>
-                    <FormLabel>Color {field.value}</FormLabel>
+                    <FormLabel>Color {field.value} <span className='text-xs text-red-500'>*</span></FormLabel>
                     <div className="flex items-center gap-2">
                         <Select
                             disabled={disabled}
@@ -168,6 +180,7 @@ const ColorSelector = ({ form, takenColors, disabled = false }: { form: any; tak
 };
 
 const calendarColors = [
+    // Original colors
     { name: 'Olive Green', value: '#DCE5AE', textColor: '#000000' },
     { name: 'Lavender', value: '#E6E6FA', textColor: '#000000' },
     { name: 'Sky Blue', value: '#87CEEB', textColor: '#000000' },
@@ -178,14 +191,64 @@ const calendarColors = [
     { name: 'Thistle', value: '#D8BFD8', textColor: '#000000' },
     { name: 'Powder Blue', value: '#B0E0E6', textColor: '#000000' },
     { name: 'Pale Green', value: '#98FB98', textColor: '#000000' },
-    { name: 'Light Pink', value: '#FFB6C1', textColor: '#000000' }
+    { name: 'Light Pink', value: '#FFB6C1', textColor: '#000000' },
+    { name: 'Apricot', value: '#FFE5B4', textColor: '#000000' },
+    { name: 'Sea Green', value: '#98D8C1', textColor: '#000000' },
+    { name: 'Periwinkle', value: '#CCCCFF', textColor: '#000000' },
+    { name: 'Wheat', value: '#F5DEB3', textColor: '#000000' },
+    { name: 'Light Cyan', value: '#E0FFFF', textColor: '#000000' },
+    { name: 'Rose Dust', value: '#FFC0CB', textColor: '#000000' },
+    { name: 'Pale Turquoise', value: '#AFEEEE', textColor: '#000000' },
+    { name: 'Champagne', value: '#F7E7CE', textColor: '#000000' },
+    { name: 'Sage', value: '#BCB88A', textColor: '#000000' },
+    // Additional colors
+    { name: 'Baby Blue', value: '#89CFF0', textColor: '#000000' },
+    { name: 'Pale Rose', value: '#FFE4E1', textColor: '#000000' },
+    { name: 'Honeydew', value: '#F1FFF1', textColor: '#000000' }, // Modified
+    { name: 'Vanilla', value: '#F3E5AB', textColor: '#000000' },
+    { name: 'Soft Lilac', value: '#D8B2D1', textColor: '#000000' },
+    { name: 'Desert Sand', value: '#EDC9AF', textColor: '#000000' },
+    { name: 'Arctic Blue', value: '#B0E2FF', textColor: '#000000' },
+    { name: 'Pale Mauve', value: '#E0B0FF', textColor: '#000000' },
+    { name: 'Buttermilk', value: '#FFF1B5', textColor: '#000000' },
+    { name: 'Mint Cream', value: '#F6FFF6', textColor: '#000000' }, // Modified
+    { name: 'Dust Storm', value: '#E5CCC9', textColor: '#000000' },
+    { name: 'Pearl Aqua', value: '#88D8C0', textColor: '#000000' },
+    { name: 'Pale Slate', value: '#C3CDE6', textColor: '#000000' },
+    { name: 'Light Khaki', value: '#F0E68C', textColor: '#000000' },
+    { name: 'Misty Rose', value: '#FFE5E2', textColor: '#000000' }, // Modified
+    { name: 'Azure Mist', value: '#F1FFFF', textColor: '#000000' }, // Modified
+    { name: 'Pale Dogwood', value: '#EDCDC2', textColor: '#000000' },
+    { name: 'Crystal', value: '#A7D8DE', textColor: '#000000' },
+    { name: 'Almond', value: '#EFDECD', textColor: '#000000' },
+    { name: 'Morning Mist', value: '#E4E4E4', textColor: '#000000' },
+    { name: 'Beach Glass', value: '#C6E6E8', textColor: '#000000' },
+    { name: 'Milk Glass', value: '#F8F8FF', textColor: '#000000' },
+    { name: 'Buff', value: '#F0DC82', textColor: '#000000' },
+    { name: 'Shell Pink', value: '#FFB7C5', textColor: '#000000' },
+    { name: 'Water Lily', value: '#DED4E8', textColor: '#000000' },
+    { name: 'Sand Dollar', value: '#E8E8D0', textColor: '#000000' },
+    { name: 'Rain Cloud', value: '#D4DFE2', textColor: '#000000' },
+    { name: 'Pale Iris', value: '#E7E7FB', textColor: '#000000' }, // Modified
+    { name: 'Crepe', value: '#F2D8D8', textColor: '#000000' },
+    { name: 'Sea Salt', value: '#F7F7F7', textColor: '#000000' },
+    { name: 'Tea Green', value: '#D0F0C0', textColor: '#000000' },
+    { name: 'Rose Water', value: '#F6E6E8', textColor: '#000000' },
+    { name: 'Moon Glow', value: '#FCFEDA', textColor: '#000000' },
+    { name: 'Frost', value: '#E8F4F8', textColor: '#000000' },
+    { name: 'Pearl Pink', value: '#FADADD', textColor: '#000000' },
+    { name: 'Cloud White', value: '#F8F9FA', textColor: '#000000' },
+    { name: 'Sea Foam', value: '#99FF99', textColor: '#000000' }, // Modified
+    { name: 'Snow Drop', value: '#F2FFF2', textColor: '#000000' }, // Modified
+    { name: 'Dew', value: '#F0F8FF', textColor: '#000000' },
+    { name: 'Cotton Candy', value: '#FFBCD9', textColor: '#000000' }
 ];
 
-const calculateAgeFromDate = (birthDate: string) => {
+export const calculateAgeFromDate = (birthDate: string) => {
     const today = new Date();
     const birth = new Date(birthDate);
 
-    // Calculate the time difference in months
+    // Calculate total months
     let months = (today.getFullYear() - birth.getFullYear()) * 12;
     months += today.getMonth() - birth.getMonth();
 
@@ -194,23 +257,30 @@ const calculateAgeFromDate = (birthDate: string) => {
         months--;
     }
 
-    // Check if months can be converted to a clean 0.5-year interval
-    const years = months / 12;
-    const roundedToHalfYear = Math.round(years * 2) / 2; // Rounds to nearest 0.5
-
-    // If the difference between actual years and rounded half-year is very small
-    // (accounting for floating point precision), use years
-    if (Math.abs(years - roundedToHalfYear) < 0.01) {
+    // First check if it's cleanly divisible by 12
+    if (Math.abs(Math.round(months) - 12 * Math.round(months / 12)) < 0.1) {
         return {
-            age: roundedToHalfYear,
+            age: Math.round(months / 12),
             unit: 'years'
         };
-    } else {
+    }
+
+    // If less than or equal to 18 months and not cleanly divisible by 12
+    if (months <= 18) {
         return {
-            age: months,
+            age: Math.round(months),
             unit: 'months'
         };
     }
+
+    // Convert to years
+    const years = months / 12;
+    const roundedToHalfYear = Math.round(years * 2) / 2;
+
+    return {
+        age: roundedToHalfYear,
+        unit: 'years'
+    };
 };
 
 const calculateDateFromAge = (age: number, unit: string): Date => {
@@ -241,13 +311,47 @@ const calculateDateFromAge = (age: number, unit: string): Date => {
     return date;
 };
 
+interface ChangedFields {
+    form: string[];
+    coaches: boolean;
+    genders: boolean;
+    packages: {
+        changed: boolean;
+        count: {
+            added: number;
+            edited: number;
+            deleted: number;
+        };
+    };
+    discounts: {
+        changed: boolean;
+        count: {
+            added: number;
+            edited: number;
+            deleted: number;
+        };
+    };
+}
+
 export default function EditProgram({ branches, sports, programEdited, academySports, takenColors }: Props) {
     const router = useRouter()
+
+    const { toast } = useToast()
 
     const { mutate: mutateProgram } = useOnboarding()
 
     const [editProgramOpen, setEditProgramOpen] = useState(false)
     const { data: coachesData } = useSWR(editProgramOpen ? 'coaches' : null, getAllCoaches)
+
+    const genders = useGendersStore((state) => state.genders).map((g) => g.name)
+    const fetched = useGendersStore((state) => state.fetched)
+    const fetchGenders = useGendersStore((state) => state.fetchGenders)
+
+    useEffect(() => {
+        if (!fetched) {
+            fetchGenders()
+        }
+    }, [fetched])
     // const { data: packagesData, isLoading, isValidating, mutate } = useSWR(editProgramOpen ? 'packages' : null, (url: string | null) => getProgramPackages(url, programEdited.id), {
     //     refreshWhenHidden: true
     // })
@@ -266,11 +370,41 @@ export default function EditProgram({ branches, sports, programEdited, academySp
     const [discountsOpen, setDiscountsOpen] = useState(false);
     const [editDiscountOpen, setEditDiscountOpen] = useState(false);
     const [editedDiscount, setEditedDiscount] = useState<{ editedDiscount: Discount, index?: number } | null>(null);
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const [showUnsavedChangesDialog, setShowUnsavedChangesDialog] = useState(false);
+    const [originalPackages] = useState(programEdited.packages);
+    const [originalDiscounts] = useState(programEdited.discounts);
+    const [changedFields, setChangedFields] = useState<ChangedFields>({
+        form: [],
+        coaches: false,
+        genders: false,
+        packages: {
+            changed: false,
+            count: {
+                added: 0,
+                edited: 0,
+                deleted: 0
+            }
+        },
+        discounts: {
+            changed: false,
+            count: {
+                added: 0,
+                edited: 0,
+                deleted: 0
+            }
+        }
+    });
+
+    console.log("selectedCoaches: ", selectedCoaches)
 
     const editProgram = useProgramsStore((state) => state.editProgram)
     const program = useProgramsStore((state) => state.programs.find(p => p.id === programEdited.id))
     const deleteDiscount = useProgramsStore((state) => state.deleteDiscount)
     const deletePackage = useProgramsStore((state) => state.deletePackage)
+    const triggerFlexibleChange = useProgramsStore((state) => state.triggerFlexibleChange)
+    const addPackage = useProgramsStore((state) => state.addPackage)
+    const editPackage = useProgramsStore((state) => state.editPackage)
 
     // useEffect(() => {
     //     if (isLoading || isValidating) return
@@ -313,6 +447,7 @@ export default function EditProgram({ branches, sports, programEdited, academySp
                 return calculateAgeFromDate(programEdited.endDateOfBirth).unit as "months" | "years" | undefined;
             })(),
             color: programEdited.color ?? '',
+            flexible: programEdited.flexible ?? false,
         }
     })
 
@@ -320,6 +455,7 @@ export default function EditProgram({ branches, sports, programEdited, academySp
     console.log(form.getValues('endAge'))
 
     const endAgeUnitChange = form.watch('endAgeUnit')
+    const startAgeUnitChange = form.watch('startAgeUnit')
 
     useEffect(() => {
         if (endAgeUnitChange === 'unlimited') {
@@ -373,20 +509,37 @@ export default function EditProgram({ branches, sports, programEdited, academySp
             //     discountsData: createdDiscounts
             // })
 
+            const newCoachPrograms = selectedCoaches.reduce((acc: any, coachId: number) => {
+                const existingCoach = programEdited.coachPrograms.find(cp => cp.coach.id === coachId);
+
+                if (existingCoach) {
+                    return [...acc, existingCoach];
+                }
+                return [...acc, {
+                    coach: {
+                        id: coachId
+                    },
+                    id: undefined
+                }]
+            }, [] as { coach: { id: number }, id: number | undefined }[])
+
             editProgram({
                 ...values,
                 ...programEdited,
                 id: programEdited.id,
                 name: values.name,
+                coachPrograms: newCoachPrograms,
                 description: values.description,
                 branchId: parseInt(values.branchId),
+                color: values.color,
+                flexible: values.flexible,
                 sportId: parseInt(values.sportId),
                 createdAt: programEdited.createdAt,
                 updatedAt: programEdited.updatedAt,
                 gender: selectedGenders.join(','),
                 startDateOfBirth: startDate.toLocaleString(),
                 endDateOfBirth: endDate.toLocaleString(),
-            })
+            }, mutateProgram)
 
             // if (result.error) {
             //     console.error('Error creating program:', result.error)
@@ -438,6 +591,189 @@ export default function EditProgram({ branches, sports, programEdited, academySp
         }
     }, [editPackageOpen])
 
+    console.log(program)
+
+    const flexibleChanged = form.watch('flexible')
+
+    useEffect(() => {
+        triggerFlexibleChange(flexibleChanged, program?.id!)
+    }, [flexibleChanged])
+
+    const handleToastValidation = () => {
+        const values = form.getValues()
+
+        const missingFields: string[] = [];
+
+        if (!values.name) missingFields.push('Name');
+        if (!values.description) missingFields.push('Description');
+        if (!values.branchId) missingFields.push('Branch');
+        if (!values.sportId) missingFields.push('Sport');
+        if (!values.color) missingFields.push('Color');
+        if (!selectedGenders.length) missingFields.push('Gender');
+        if (!selectedCoaches.length) missingFields.push('Coaches');
+        if (values.startAge === undefined || values.startAge === null) missingFields.push('Start Age');
+        if (values.endAgeUnit !== 'unlimited' && (!values.endAge || values.endAge === undefined)) {
+            missingFields.push('End Age');
+        }
+
+        if (missingFields.length > 0) {
+            toast({
+                title: "Missing Required Fields",
+                description: `Please fill in the following required fields: ${missingFields.join(', ')}`,
+                variant: "destructive",
+            });
+            return;
+        }
+
+        if (!selectedGenders.length) {
+            toast({
+                title: "Gender Selection Required",
+                description: "Please select at least one gender for the program",
+                variant: "destructive",
+            });
+            return;
+        }
+    }
+
+    useEffect(() => {
+        setSelectedCoaches(program?.coachPrograms.map(cp => cp.coach.id) ?? [])
+    }, [program])
+
+    useEffect(() => {
+        const formSubscription = form.watch(() => {
+            checkForChanges();
+        });
+
+        return () => {
+            formSubscription.unsubscribe();
+        };
+    }, []);
+
+    // Add this function to check for changes
+    const checkForChanges = () => {
+        const formValues = form.getValues();
+        const initialFormValues = {
+            name: programEdited.name ?? '',
+            description: programEdited.description ?? '',
+            branchId: programEdited.branchId?.toString() ?? '',
+            sportId: programEdited.sportId?.toString() ?? '',
+            numberOfSeats: programEdited.numberOfSeats?.toString() ?? '',
+            type: programEdited.type,
+            color: programEdited.color ?? '',
+            flexible: programEdited.flexible ?? false,
+            startAge: (() => {
+                if (!programEdited.startDateOfBirth) return 0;
+                const { age } = calculateAgeFromDate(programEdited.startDateOfBirth);
+                return age;
+            })(),
+            startAgeUnit: (() => {
+                if (!programEdited.startDateOfBirth) return 'years';
+                return calculateAgeFromDate(programEdited.startDateOfBirth).unit;
+            })(),
+            endAge: (() => {
+                if (!programEdited.endDateOfBirth) return undefined;
+                const { age } = calculateAgeFromDate(programEdited.endDateOfBirth);
+                if (age >= 100) return undefined;
+                return age;
+            })(),
+            endAgeUnit: (() => {
+                if (!programEdited.endDateOfBirth) return 'unlimited';
+                const { age } = calculateAgeFromDate(programEdited.endDateOfBirth);
+                if (age >= 100) return 'unlimited';
+                return calculateAgeFromDate(programEdited.endDateOfBirth).unit;
+            })(),
+        };
+
+        // Check which form fields have changed
+        const changedFormFields = Object.keys(formValues).filter(key =>
+            JSON.stringify(formValues[key as keyof typeof formValues]) !== JSON.stringify(initialFormValues[key as keyof typeof initialFormValues])
+        );
+
+        // Count package changes
+        const packageChanges = {
+            added: program?.packages?.filter(p => !p.id && !p.deleted).length || 0,
+            edited: program?.packages?.filter(p => {
+                const original = originalPackages?.find(op => op.id === p.id);
+                return original && JSON.stringify({ ...original, updatedAt: undefined, schedules: original.schedules.map(s => ({ ...s, updatedAt: undefined, id: undefined })) }) !== JSON.stringify({ ...p, updatedAt: undefined, schedules: p.schedules.map(s => ({ ...s, updatedAt: undefined, id: undefined })) }) && !p.deleted;
+            }).length || 0,
+            deleted: program?.packages?.filter(p => p.deleted).length || 0
+        };
+
+        // Count discount changes
+        const discountChanges = {
+            added: program?.discounts?.filter(d => !d.id).length || 0,
+            edited: program?.discounts?.filter(d => {
+                const original = originalDiscounts?.find(od => od.id === d.id);
+                return original && JSON.stringify({ ...original, updatedAt: undefined }) !== JSON.stringify({ ...d, updatedAt: undefined });
+            }).length || 0,
+            deleted: originalDiscounts?.filter(d =>
+                !program?.discounts?.find(pd => pd.id === d.id)
+            ).length || 0
+        };
+
+        const formChanged = changedFormFields.length > 0;
+        const coachesChanged = JSON.stringify(selectedCoaches) !== JSON.stringify(programEdited.coachPrograms.map(coach => coach.coach.id));
+        const gendersChanged = JSON.stringify(selectedGenders) !== JSON.stringify(programEdited.gender?.split(',') ?? []);
+        const packagesChanged = JSON.stringify(program?.packages.map(p => ({ ...p, updatedAt: undefined, schedules: p.schedules.map(s => ({ ...s, updatedAt: undefined, id: undefined, createdAt: undefined })), createdAt: undefined }))) !== JSON.stringify(originalPackages.map(pk => ({ ...pk, updatedAt: undefined, schedules: pk.schedules.map(sk => ({ ...sk, updatedAt: undefined, id: undefined, createdAt: undefined })), createdAt: undefined })));
+        const discountsChanged = JSON.stringify(program?.discounts.map(d => ({ ...d, updatedAt: undefined }))) !== JSON.stringify(originalDiscounts.map(d => ({ ...d, updatedAt: undefined })));
+
+        console.log("NOW Packages", JSON.stringify(program?.packages.map(p => ({ ...p, updatedAt: undefined, schedules: p.schedules.map(s => ({ ...s, updatedAt: undefined, id: undefined })) }))))
+        console.log("Original Packages", JSON.stringify(originalPackages.map(pk => ({ ...pk, updatedAt: undefined, schedules: pk.schedules.map(sk => ({ ...sk, updatedAt: undefined, id: undefined })) }))))
+
+        const hasChanges = formChanged || coachesChanged || gendersChanged || packagesChanged || discountsChanged;
+
+        setChangedFields({
+            form: changedFormFields,
+            coaches: coachesChanged,
+            genders: gendersChanged,
+            packages: {
+                changed: packagesChanged,
+                count: packageChanges
+            },
+            discounts: {
+                changed: discountsChanged,
+                count: discountChanges
+            }
+        });
+
+
+        setHasUnsavedChanges(hasChanges);
+        return { hasChanges, changedFields };
+    };
+
+    // Add these useEffects to track packages and discounts changes
+    useEffect(() => {
+        checkForChanges();
+    }, [program?.packages]);
+
+    useEffect(() => {
+        checkForChanges();
+    }, [program?.discounts]);
+
+    useEffect(() => {
+        checkForChanges();
+    }, [selectedCoaches, selectedGenders]);
+
+    useEffect(() => {
+        checkForChanges();
+    }, [program])
+
+    useEffect(() => {
+        checkForChanges();
+    }, [])
+
+    const handleDialogClose = (open: boolean) => {
+        const { hasChanges, changedFields } = checkForChanges();
+
+        console.log("Changed Fields", changedFields)
+
+        if (!open && hasChanges) {
+            setShowUnsavedChangesDialog(true);
+            return;
+        }
+        setEditProgramOpen(open);
+    }
+
     return (
         <>
             <Button variant="ghost" size="icon" onClick={() => setEditProgramOpen(true)}>
@@ -448,20 +784,106 @@ export default function EditProgram({ branches, sports, programEdited, academySp
                     height={20}
                 />
             </Button>
-            <Dialog open={editProgramOpen} onOpenChange={setEditProgramOpen}>
-                <DialogContent className='bg-main-white min-w-[920px] max-w-[920px]'>
+            <AlertDialog open={showUnsavedChangesDialog} onOpenChange={setShowUnsavedChangesDialog}>
+                <AlertDialogContent className="max-w-md">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Unsaved Changes</AlertDialogTitle>
+                        <AlertDialogDescription className="space-y-2">
+                            <p>The following changes will be discarded:</p>
+
+                            <div className="pl-4 space-y-1 text-sm">
+                                {changedFields.form.length > 0 && (
+                                    <p>• Form fields changed: {changedFields.form.map(field => {
+                                        const fieldNames: Record<string, string> = {
+                                            name: 'Name',
+                                            description: 'Description',
+                                            branchId: 'Branch',
+                                            sportId: 'Sport',
+                                            numberOfSeats: 'Number of Seats',
+                                            type: 'Type',
+                                            color: 'Color',
+                                            flexible: 'Flexible Schedule',
+                                            startAge: 'Start Age',
+                                            startAgeUnit: 'Start Age Unit',
+                                            endAge: 'End Age',
+                                            endAgeUnit: 'End Age Unit'
+                                        };
+                                        return fieldNames[field] || field;
+                                    }).join(', ')}</p>
+                                )}
+
+                                {changedFields.coaches && (
+                                    <p>• Selected coaches have been modified</p>
+                                )}
+
+                                {changedFields.genders && (
+                                    <p>• Gender selection has been modified</p>
+                                )}
+
+                                {changedFields.packages.changed && (
+                                    <p>• Package changes: {[
+                                        changedFields.packages.count.added > 0 && `${changedFields.packages.count.added} added`,
+                                        changedFields.packages.count.edited > 0 && `${changedFields.packages.count.edited} edited`,
+                                        changedFields.packages.count.deleted > 0 && `${changedFields.packages.count.deleted} deleted`
+                                    ].filter(Boolean).join(', ')}</p>
+                                )}
+
+                                {changedFields.discounts.changed && (
+                                    <p>• Discount changes: {[
+                                        changedFields.discounts.count.added > 0 && `${changedFields.discounts.count.added} added`,
+                                        changedFields.discounts.count.edited > 0 && `${changedFields.discounts.count.edited} edited`,
+                                        changedFields.discounts.count.deleted > 0 && `${changedFields.discounts.count.deleted} deleted`
+                                    ].filter(Boolean).join(', ')}</p>
+                                )}
+                            </div>
+
+                            <p className="pt-2">Are you sure you want to discard these changes?</p>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel className='flex disabled:opacity-60 items-center justify-center gap-1 rounded-3xl text-main-yellow bg-main-green px-4 py-2.5 hover:bg-main-green hover:text-main-yellow'>
+                            Continue Editing
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => {
+                                setShowUnsavedChangesDialog(false);
+                                setEditProgramOpen(false);
+                                // Reset form to initial values
+                                form.reset();
+                                setSelectedCoaches(programEdited.coachPrograms.map(coach => coach.coach.id));
+                                setSelectedGenders(programEdited.gender?.split(',') ?? []);
+
+                                // Reset packages and discounts to their initial state
+                                if (program?.id) {
+                                    editProgram({
+                                        ...programEdited,
+                                        id: program.id,
+                                        packages: originalPackages,
+                                        discounts: originalDiscounts
+                                    }, mutateProgram);
+                                }
+                            }}
+                            className='flex disabled:opacity-60 items-center justify-center gap-1 rounded-3xl text-white bg-red-500 px-4 py-2.5 hover:bg-red-500 hover:text-white'
+                        >
+                            Discard Changes
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            <Dialog open={editProgramOpen} onOpenChange={handleDialogClose}>
+                <DialogContent className='bg-main-white min-w-[920px] max-w-[920px] min-h-[650px]'>
                     <Form {...form}>
-                        <form onSubmit={form.handleSubmit(onSubmit)} className='flex flex-col gap-6 w-full'>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className='flex flex-col gap-6 w-full h-full min-h-[650px]'>
                             <DialogHeader className='flex flex-row pr-6 text-center items-center justify-between gap-2'>
                                 <DialogTitle className='font-normal text-base'>New Program</DialogTitle>
                                 <div className='flex items-center gap-2'>
-                                    <button disabled={loading} type='submit' className='flex disabled:opacity-60 items-center justify-center gap-1 rounded-3xl text-main-yellow bg-main-green px-4 py-2.5'>
+                                    <button onClick={handleToastValidation} disabled={loading} type='submit' className='flex disabled:opacity-60 items-center justify-center gap-1 rounded-3xl text-main-yellow bg-main-green px-4 py-2.5'>
                                         {loading && <Loader2 className='h-5 w-5 animate-spin' />}
                                         Save
                                     </button>
                                 </div>
                             </DialogHeader>
-                            <div className="w-full max-h-[380px] overflow-y-auto">
+                            <div className="w-full max-h-[650px] overflow-y-auto">
                                 <div className="flex flex-col gap-6 w-full px-2">
                                     <div className="flex w-full gap-4 items-start justify-between">
 
@@ -470,7 +892,7 @@ export default function EditProgram({ branches, sports, programEdited, academySp
                                             name='name'
                                             render={({ field }) => (
                                                 <FormItem className='flex-1'>
-                                                    <FormLabel>Name</FormLabel>
+                                                    <FormLabel>Name <span className='text-xs text-red-500'>*</span></FormLabel>
                                                     <FormControl>
                                                         <Input disabled={loading} {...field} className='px-2 py-6 rounded-[10px] border border-gray-500 font-inter' />
                                                     </FormControl>
@@ -483,11 +905,35 @@ export default function EditProgram({ branches, sports, programEdited, academySp
                                             name='description'
                                             render={({ field }) => (
                                                 <FormItem className='flex-1'>
-                                                    <FormLabel>Description</FormLabel>
+                                                    <FormLabel>Description <span className='text-xs text-red-500'>*</span></FormLabel>
                                                     <FormControl>
                                                         <AutoGrowingTextarea disabled={loading} field={{ ...field }} className='px-2 py-6 rounded-[10px] border border-gray-500 font-inter' />
                                                     </FormControl>
                                                     <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-4 mt-4 mb-4">
+                                        <FormField
+                                            control={form.control}
+                                            name="flexible"
+                                            render={({ field }) => (
+                                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                                                    <div className="space-y-0.5">
+                                                        <FormLabel className="text-base">Flexible Schedule Program</FormLabel>
+                                                        <FormDescription>
+                                                            Allow program schedules to be flexible. All packages in this program will inherit this setting.
+                                                        </FormDescription>
+                                                    </div>
+                                                    <FormControl>
+                                                        <Switch
+                                                            checked={field.value}
+                                                            onCheckedChange={field.onChange}
+                                                            disabled={loading}
+                                                        />
+                                                    </FormControl>
                                                 </FormItem>
                                             )}
                                         />
@@ -500,7 +946,7 @@ export default function EditProgram({ branches, sports, programEdited, academySp
                                             name="branchId"
                                             render={({ field }) => (
                                                 <FormItem className='flex-1'>
-                                                    <FormLabel>Branch</FormLabel>
+                                                    <FormLabel>Branch <span className='text-xs text-red-500'>*</span></FormLabel>
                                                     <Select disabled={loading} onValueChange={field.onChange} defaultValue={field.value}>
                                                         <FormControl>
                                                             <SelectTrigger className='px-2 py-6 rounded-[10px] border border-gray-500 font-inter'>
@@ -521,7 +967,7 @@ export default function EditProgram({ branches, sports, programEdited, academySp
                                         />
 
                                         <div className="flex flex-col gap-4 flex-1">
-                                            <p className='text-xs'>Genders</p>
+                                            <p className='text-xs'>For <span className='text-xs text-red-500'>*</span></p>
                                             <div className="flex w-full flex-col gap-4 border border-gray-500 p-3 rounded-lg">
                                                 <div className="flex flex-wrap gap-2">
                                                     {selectedGenders.map((gender) => (
@@ -563,48 +1009,16 @@ export default function EditProgram({ branches, sports, programEdited, academySp
                                                             }}
                                                         >
                                                             <div className="p-2">
-                                                                <p
-                                                                    key={'male'}
-                                                                    onClick={() => handleSelectGender('male')}
-                                                                    className="p-2 flex items-center justify-start gap-2 text-left cursor-pointer hover:bg-[#fafafa] rounded-lg"
-                                                                >
-                                                                    {selectedGenders.includes('male') && <X className="size-3" fill='#1f441f' />}
-                                                                    {'male'}
-                                                                </p>
-                                                                <p
-                                                                    key={'female'}
-                                                                    onClick={() => handleSelectGender('female')}
-                                                                    className="p-2 flex items-center justify-start gap-2 text-left cursor-pointer hover:bg-[#fafafa] rounded-lg"
-                                                                >
-                                                                    {selectedGenders.includes('female') && <X className="size-3" fill='#1f441f' />}
-                                                                    {'female'}
-                                                                </p>
-                                                                <p
-                                                                    key={'adults'}
-                                                                    onClick={() => handleSelectGender('adults')}
-                                                                    className="p-2 flex items-center justify-start gap-2 text-left cursor-pointer hover:bg-[#fafafa] rounded-lg"
-                                                                >
-                                                                    {selectedGenders.includes('adults') && <X className="size-3" fill='#1f441f' />}
-                                                                    {'adults'}
-                                                                </p>
-
-                                                                <p
-                                                                    key={'adults men'}
-                                                                    onClick={() => handleSelectGender('adults men')}
-                                                                    className="p-2 flex items-center justify-start gap-2 text-left cursor-pointer hover:bg-[#fafafa] rounded-lg"
-                                                                >
-                                                                    {selectedGenders.includes('adults men') && <X className="size-3" fill='#1f441f' />}
-                                                                    {'adults men'}
-                                                                </p>
-
-                                                                <p
-                                                                    key={'ladies only'}
-                                                                    onClick={() => handleSelectGender('ladies only')}
-                                                                    className="p-2 flex items-center justify-start gap-2 text-left cursor-pointer hover:bg-[#fafafa] rounded-lg"
-                                                                >
-                                                                    {selectedGenders.includes('ladies only') && <X className="size-3" fill='#1f441f' />}
-                                                                    {'ladies only'}
-                                                                </p>
+                                                                {genders.map(gender => (
+                                                                    <p
+                                                                        key={gender}
+                                                                        onClick={() => handleSelectGender(gender)}
+                                                                        className="p-2 flex items-center justify-start gap-2 text-left cursor-pointer hover:bg-[#fafafa] rounded-lg"
+                                                                    >
+                                                                        {selectedGenders.includes(gender) && <X className="size-3" fill='#1f441f' />}
+                                                                        {gender}
+                                                                    </p>
+                                                                ))}
                                                             </div>
                                                         </div>
                                                     </PopoverContent>
@@ -621,13 +1035,13 @@ export default function EditProgram({ branches, sports, programEdited, academySp
                                                 name='startAge'
                                                 render={({ field }) => (
                                                     <FormItem className="flex flex-col flex-1">
-                                                        <FormLabel>Start Age</FormLabel>
+                                                        <FormLabel>Start Age <span className='text-xs text-red-500'>*</span></FormLabel>
                                                         <FormControl>
                                                             <Input
                                                                 type="number"
                                                                 {...field}
                                                                 onChange={e => field.onChange(Number(e.target.value))}
-                                                                step={0.5}
+                                                                step={startAgeUnitChange === 'months' ? 1 : 0.5}
                                                                 min={0}
                                                                 max={100}
                                                                 disabled={loading}
@@ -667,14 +1081,14 @@ export default function EditProgram({ branches, sports, programEdited, academySp
                                                 name='endAge'
                                                 render={({ field }) => (
                                                     <FormItem className="flex flex-col flex-1">
-                                                        <FormLabel>End Age</FormLabel>
+                                                        <FormLabel>End Age <span className='text-xs text-red-500'>*</span></FormLabel>
                                                         <FormControl>
                                                             <Input
                                                                 type="number"
                                                                 {...field}
                                                                 onChange={e => field.onChange(Number(e.target.value))}
-                                                                step={0.5}
-                                                                min={0.5}
+                                                                step={endAgeUnitChange === 'months' ? 1 : 0.5}
+                                                                min={0}
                                                                 max={100}
                                                                 disabled={loading || form.watch('endAgeUnit') === 'unlimited'}
                                                                 className='px-2 py-6 rounded-[10px] border border-gray-500 font-inter'
@@ -710,7 +1124,7 @@ export default function EditProgram({ branches, sports, programEdited, academySp
                                     </div>
 
                                     <div className="flex flex-col gap-4 w-full">
-                                        <p className='text-xs'>Coaches</p>
+                                        <p className='text-xs'>Coaches <span className='text-xs text-red-500'>*</span></p>
                                         <div className="flex w-full flex-col gap-4 border border-gray-500 p-3 rounded-lg">
                                             <div className="flex flex-wrap gap-2">
                                                 {selectedCoaches.map((coach) => (
@@ -780,7 +1194,7 @@ export default function EditProgram({ branches, sports, programEdited, academySp
                                             name="sportId"
                                             render={({ field }) => (
                                                 <FormItem className='flex-1'>
-                                                    <FormLabel>Sport</FormLabel>
+                                                    <FormLabel>Sport <span className='text-xs text-red-500'>*</span></FormLabel>
                                                     <Select disabled={loading} onValueChange={field.onChange} defaultValue={field.value}>
                                                         <FormControl>
                                                             <SelectTrigger className='px-2 py-6 rounded-[10px] border border-gray-500 font-inter'>
@@ -871,7 +1285,7 @@ export default function EditProgram({ branches, sports, programEdited, academySp
                                             </div>
 
                                             {/* Rows */}
-                                            {program?.packages?.map((packageData, index) => (
+                                            {program?.packages?.filter(p => !p.deleted).map((packageData, index) => (
                                                 <Fragment key={index}>
                                                     <div className="py-4 px-2 bg-main-white flex items-center justify-center">
                                                         {!packageData.id && (
@@ -879,7 +1293,7 @@ export default function EditProgram({ branches, sports, programEdited, academySp
                                                         )}
                                                     </div>
                                                     <div className="py-4 px-4 bg-main-white flex items-center justify-start font-bold font-inter">
-                                                        {packageData.name}
+                                                        {packageData.name.length > 10 ? packageData.name.substring(0, 10) + "..." : packageData.name}
                                                     </div>
                                                     <div className="py-4 px-4 bg-main-white flex items-center justify-start font-bold font-inter">
                                                         {packageData.price}
@@ -891,9 +1305,24 @@ export default function EditProgram({ branches, sports, programEdited, academySp
                                                         {new Date(packageData.endDate).toLocaleDateString()}
                                                     </div>
                                                     <div className="py-4 px-4 bg-main-white flex items-center justify-start font-bold font-inter">
-                                                        {packageData.schedules.length}
+                                                        {packageData.schedules.length}{program.flexible && `, ${packageData.sessionPerWeek} per week ${packageData.sessionDuration ? `(${packageData.sessionDuration} minutes)` : ''}`}
                                                     </div>
                                                     <div className="py-4 px-4 bg-main-white gap-4 rounded-r-[20px] flex items-center justify-end font-bold font-inter">
+                                                        <Button
+                                                            type='button'
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => editPackage({
+                                                                ...packageData,
+                                                                hidden: !packageData.hidden
+                                                            })}
+                                                        >
+                                                            {packageData.hidden ? (
+                                                                <EyeOff className="h-4 w-4" />
+                                                            ) : (
+                                                                <Eye className="h-4 w-4" />
+                                                            )}
+                                                        </Button>
                                                         <Button
                                                             type='button'
                                                             variant="ghost"
@@ -909,6 +1338,26 @@ export default function EditProgram({ branches, sports, programEdited, academySp
                                                                 width={20}
                                                                 height={20}
                                                             />
+                                                        </Button>
+                                                        <Button
+                                                            type='button'
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => {
+                                                                addPackage({
+                                                                    ...packageData,
+                                                                    id: undefined,
+                                                                    tempId: parseInt(uuid().split('-')[0], 16),
+                                                                    name: `${packageData.name}`,
+                                                                    schedules: packageData.schedules.map(schedule => ({
+                                                                        ...schedule,
+                                                                        id: undefined,
+                                                                        packageId: undefined
+                                                                    }))
+                                                                })
+                                                            }}
+                                                        >
+                                                            <Copy className="h-4 w-4" />
                                                         </Button>
                                                         <TrashIcon
                                                             className="h-4 w-4 cursor-pointer"
