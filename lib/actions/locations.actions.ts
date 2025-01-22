@@ -2,8 +2,8 @@
 import { db } from '@/db'
 import { branches, branchTranslations, branchFacility, branchSport, programs, reviews } from '@/db/schema'
 import { auth } from '@/auth'
-import { and, eq, inArray, not, sql } from 'drizzle-orm'
-import { revalidatePath, revalidateTag, unstable_cache } from 'next/cache'
+import { and, eq, inArray, like, not, sql } from 'drizzle-orm'
+import { revalidateTag, unstable_cache } from 'next/cache'
 import { slugify } from '../utils'
 import { cookies } from 'next/headers'
 import { fetchPlaceInformation, getPlaceId } from './reviews.actions'
@@ -115,7 +115,8 @@ async function manageAssessmentPrograms(tx: any, branchId: number, academicId: n
         .where(
             and(
                 eq(programs.branchId, branchId),
-                inArray(programs.sportId, sportIds)
+                inArray(programs.sportId, sportIds),
+                like(programs.name, '%Assessment%')
             )
         );
 
@@ -430,11 +431,19 @@ export async function updateLocation(id: number, data: {
         const facilitiesToRemove = existingFacilityIds.filter(id => !data.facilities.includes(id))
 
         await Promise.all([
+            manageAssessmentPrograms(db, id, academy.id, data.sports),
             sportsToRemove.length > 0 ?
                 db.delete(branchSport)
                     .where(and(
                         eq(branchSport.branchId, id),
                         inArray(branchSport.sportId, sportsToRemove)
+                    )) : Promise.resolve(),
+
+            sportsToRemove.length > 0 ?
+                db.delete(programs)
+                    .where(and(
+                        eq(programs.branchId, id),
+                        inArray(programs.sportId, sportsToRemove),
                     )) : Promise.resolve(),
 
             sportsToAdd.length > 0 ?
@@ -466,13 +475,13 @@ export async function updateLocation(id: number, data: {
                     .where(and(
                         eq(programs.branchId, id),
                         inArray(programs.sportId, sportsToRemove),
-                        eq(programs.name, 'Assessment')
+                        eq(programs.type, 'assessment')
                     )) : Promise.resolve(),
-            sportsToAdd.length > 0 ?
-                manageAssessmentPrograms(db, id, academy.id, sportsToAdd) : Promise.resolve()
+            // sportsToAdd.length > 0 ?
+            //     manageAssessmentPrograms(db, id, academy.id, sportsToAdd) : Promise.resolve()
         ])
 
-        // revalidatePath('/academy/academy/locations')
+        // revalidatePath('/academy/locations')
         return { success: true }
 
     } catch (error) {
@@ -488,38 +497,19 @@ export async function updateLocation(id: number, data: {
 export async function deleteLocations(ids: number[]) {
     const session = await auth()
 
-    if (!session?.user) {
-        return { error: 'You are not authorized to perform this action', field: null, data: [] }
+    if (!session?.user || session.user.role !== 'academic') {
+        return { error: 'Unauthorized' }
     }
 
-    const cookieStore = await cookies()
-    const impersonatedId = session.user.role === 'admin'
-        ? cookieStore.get('impersonatedAcademyId')?.value
-        : null
-
-    // Build the where condition based on user role and impersonation
-    const academicId = session.user.role === 'admin' && impersonatedId
-        ? parseInt(impersonatedId)
-        : parseInt(session.user.id)
-
-    // If not admin and not academic, return error
-    if (session.user.role !== 'admin' && session.user.role !== 'academic') {
-        return { error: 'You are not authorized to perform this action', field: null, data: [] }
-    }
+    await Promise.all(ids.map(async id => await db.delete(branches).where(eq(branches.id, id))))
 
     const academy = await db.query.academics.findFirst({
-        where: (academics, { eq }) => eq(academics.userId, academicId),
+        where: (academics, { eq }) => eq(academics.userId, parseInt(session.user.id)),
         columns: {
             id: true,
         }
     })
 
-    if (!academy) return { error: 'Academy not found' }
-
-    await Promise.all(ids.map(async id => await db.delete(branches).where(eq(branches.id, id))))
-
     revalidateTag(`locations-${academy?.id}`)
-    revalidatePath('/academy/academy/assessment')
-
     return { success: true }
 }
