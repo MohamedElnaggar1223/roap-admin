@@ -671,13 +671,15 @@ export const programs = pgTable("programs", {
     sportId: bigint("sport_id", { mode: "number" }),
     gender: varchar({ length: 255 }).default(sql`NULL`),
     name: varchar({ length: 255 }).default(sql`NULL`),
-    description: varchar({ length: 255 }).default(sql`NULL`),
+    description: text("description").default(sql`NULL`),
     startDateOfBirth: date("start_date_of_birth"),
     endDateOfBirth: date("end_date_of_birth"),
     createdAt: timestamp("created_at", { mode: 'string' }),
     updatedAt: timestamp("updated_at", { mode: 'string' }),
     color: varchar({ length: 255 }).default(sql`NULL`),
     assessmentDeductedFromProgram: boolean("assessment_deducted_from_program").default(false).notNull(),
+    flexible: boolean("flexible").default(false).notNull(),
+    hidden: boolean("hidden").default(false).notNull(),
 }, (table) => {
     return {
         programsAcademicIdForeign: foreignKey({
@@ -799,7 +801,7 @@ export const packages = pgTable("packages", {
     months: text("months").array(),
     sessionPerWeek: integer("session_per_week").default(0).notNull(),
     sessionDuration: integer("session_duration"),
-    capacity: integer("capacity").default(0).notNull(),
+    capacity: integer("capacity").default(0),
     // You can use { mode: "bigint" } if numbers are exceeding js number limitations
     programId: bigint("program_id", { mode: "number" }).notNull(),
     createdAt: timestamp("created_at", { mode: 'string' }),
@@ -810,6 +812,8 @@ export const packages = pgTable("packages", {
     entryFeesAppliedUntil: text("entry_fees_applied_until").array(),
     entryFeesStartDate: date("entry_fees_start_date"),
     entryFeesEndDate: date("entry_fees_end_date"),
+    flexible: boolean("flexible"),
+    hidden: boolean("hidden").default(false).notNull(),
 }, (table) => {
     return {
         packagesProgramIdForeign: foreignKey({
