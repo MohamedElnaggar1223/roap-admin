@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Fragment } from 'react'
+import { useState, Fragment, useEffect } from 'react'
 import { ChevronDown, SearchIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,7 @@ import { useDebouncedCallback } from 'use-debounce'
 import EditAssessment from './edit-assessment'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
+import { useGendersStore } from '@/providers/store-provider'
 
 interface Branch {
     id: number
@@ -62,7 +63,15 @@ interface AssessmentsTableProps {
 export function AssessmentsTable({ data, branches, sports, academySports }: AssessmentsTableProps) {
     const router = useRouter()
 
-    console.log("Assessments Data", data)
+    const genders = useGendersStore((state) => state.genders).map((g) => g.name)
+    const fetched = useGendersStore((state) => state.fetched)
+    const fetchGenders = useGendersStore((state) => state.fetchGenders)
+
+    useEffect(() => {
+        if (!fetched) {
+            fetchGenders()
+        }
+    }, [fetched])
 
     const [selectedSport, setSelectedSport] = useState<string | null>(null)
     const [selectedGender, setSelectedGender] = useState<string | null>(null)
@@ -90,6 +99,16 @@ export function AssessmentsTable({ data, branches, sports, academySports }: Asse
         debouncedSearch(value)
     }
 
+    useEffect(() => {
+        setFilteredData(() => {
+            const filtered = data.slice()
+                .filter((assessment) => selectedSport ? assessment.sportId === parseInt(selectedSport) : true)
+                .filter((assessment) => selectedGender ? assessment.gender?.includes(selectedGender) : true)
+                .filter((assessment) => selectedBranch ? assessment.branchId === parseInt(selectedBranch) : true)
+            return filtered
+        })
+    }, [selectedSport, selectedGender, selectedBranch, data])
+
     return (
         <>
             <div className="flex items-center justify-between gap-4 w-full flex-wrap">
@@ -111,7 +130,7 @@ export function AssessmentsTable({ data, branches, sports, academySports }: Asse
                             </DropdownMenuTrigger>
                             <DropdownMenuContent className='max-h-48 overflow-auto bg-[#F1F2E9]'>
                                 <DropdownMenuItem onClick={() => setSelectedGender(null)}>All</DropdownMenuItem>
-                                {['male', 'female', 'adults', 'adults men', 'ladies only'].map(gender => (
+                                {genders.filter(g => data.map(p => p.gender?.split(',')).flat().includes(g)).map(gender => (
                                     <DropdownMenuItem
                                         key={gender}
                                         onClick={() => setSelectedGender(gender)}
@@ -204,9 +223,6 @@ export function AssessmentsTable({ data, branches, sports, academySports }: Asse
 
                     {/* Rows */}
                     {filteredData
-                        .filter((assessment) => selectedSport ? assessment.sportId === parseInt(selectedSport) : true)
-                        .filter((assessment) => selectedGender ? assessment.gender?.includes(selectedGender) : true)
-                        .filter((assessment) => selectedBranch ? assessment.branchId === parseInt(selectedBranch) : true)
                         .map((assessment) => (
                             <Fragment key={assessment.id}>
                                 <div className="py-4 px-4 bg-main-white rounded-l-[20px] flex items-center justify-start font-bold font-inter">
