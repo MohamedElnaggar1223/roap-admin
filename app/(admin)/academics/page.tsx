@@ -38,6 +38,7 @@ import { Label } from '@/components/ui/label'
 import { startImpersonation, stopImpersonation } from '@/lib/actions/impersonations.actions'
 import { useDebouncedCallback } from 'use-debounce'
 import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
 
 type Academic = {
 	id: number
@@ -49,6 +50,8 @@ type Academic = {
 	onboarded: boolean
 	status: 'pending' | 'accepted' | 'rejected' | null
 	hidden: boolean
+	sportsCount: number;
+	locationsCount: number;
 }
 
 type PaginationMeta = {
@@ -58,7 +61,7 @@ type PaginationMeta = {
 	totalPages: number
 }
 
-const AcademicsTable = ({ academics, selectedRows, onSelectRow, onSelectAll, handleChange, setRefetch }: {
+const AcademicsTable = ({ academics, selectedRows, onSelectRow, onSelectAll, handleChange, setRefetch, meta }: {
 	academics: Academic[]
 	selectedRows: number[]
 	onSelectRow: (id: number) => void
@@ -66,6 +69,7 @@ const AcademicsTable = ({ academics, selectedRows, onSelectRow, onSelectAll, han
 	statusFilter: string
 	handleChange: (academyId: string) => Promise<void>
 	setRefetch: React.Dispatch<React.SetStateAction<boolean>>
+	meta: PaginationMeta
 }) => {
 	const router = useRouter()
 	const [acceptAcademicLoading, setAcceptAcademicLoading] = useState<number | null>(null)
@@ -123,13 +127,15 @@ const AcademicsTable = ({ academics, selectedRows, onSelectRow, onSelectAll, han
 						<TableHead className="min-w-[200px]">Entry Fees</TableHead>
 						<TableHead className="min-w-[200px]">Academic Lead</TableHead>
 						<TableHead className="min-w-[200px]">Status</TableHead>
+						<TableHead className="min-w-[200px]">Sports</TableHead>
+						<TableHead className="min-w-[200px]">Locations</TableHead>
 						<TableHead className="sr-only">Actions</TableHead>
 					</TableRow>
 				</TableHeader>
 				<TableBody>
 					{academics.map((academic, index) => (
 						<TableRow key={academic.id}>
-							<TableCell>{index + 1}</TableCell>
+							<TableCell>{(meta.page - 1) * meta.pageSize + index + 1}</TableCell>
 							<TableCell>
 								<Checkbox
 									checked={selectedRows.includes(academic.id)}
@@ -142,6 +148,8 @@ const AcademicsTable = ({ academics, selectedRows, onSelectRow, onSelectAll, han
 							<TableCell>${academic.entryFees.toFixed(2)}</TableCell>
 							<TableCell>{academic.userName || 'N/A'}</TableCell>
 							<TableCell>{academic.status || 'pending'}</TableCell>
+							<TableCell>{academic.sportsCount}</TableCell>
+							<TableCell>{academic.locationsCount}</TableCell>
 							<TableCell>
 								<div className="flex space-x-2">
 									{/* <Button variant="outline" className="flex items-center gap-2">
@@ -155,7 +163,7 @@ const AcademicsTable = ({ academics, selectedRows, onSelectRow, onSelectAll, han
 									<Button
 										onClick={() => handleToggleVisibility(academic.id)}
 										variant="outline"
-										className="flex items-center gap-2"
+										className={cn("flex items-center gap-2", academic.hidden && 'bg-black text-white')}
 										disabled={toggleVisibilityLoading === academic.id}
 									>
 										{toggleVisibilityLoading === academic.id ? (
@@ -397,6 +405,7 @@ export default function AcademicsContainer() {
 							statusFilter={statusFilter}
 							handleChange={handleChange}
 							setRefetch={setRefetch}
+							meta={meta}
 						/>
 					</TabsContent>
 					<TabsContent value="onboarded" className="mt-6">
@@ -408,6 +417,7 @@ export default function AcademicsContainer() {
 							statusFilter={statusFilter}
 							handleChange={handleChange}
 							setRefetch={setRefetch}
+							meta={meta}
 						/>
 					</TabsContent>
 				</Tabs>

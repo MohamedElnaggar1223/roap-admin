@@ -259,6 +259,16 @@ export async function getPaginatedAcademics(
 			hidden: academics.hidden,
 			createdAt: academics.createdAt,
 			onboarded: academics.onboarded,
+			sportsCount: sql<number>`(
+                SELECT COUNT(DISTINCT as2.sport_id)
+                FROM ${academicSport} as2
+                WHERE as2.academic_id = ${academics.id}
+            )`,
+			locationsCount: sql<number>`(
+                SELECT COUNT(*)
+                FROM ${branches} b
+                WHERE b.academic_id = ${academics.id}
+            )`
 		})
 		.from(academics)
 		.leftJoin(users, eq(academics.userId, users.id))
