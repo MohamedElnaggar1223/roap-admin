@@ -14,12 +14,14 @@ interface Schedule {
     from: string
     to: string
     memo: string | undefined
+    startDateOfBirth: string | null | undefined
+    endDateOfBirth: string | null | undefined
+    gender: string | null | undefined
 }
 
 function getFirstAndLastDayOfMonths(months: string[]) {
     if (!months.length) return { startDate: new Date(), endDate: new Date() }
 
-    // Sort months chronologically
     const sortedMonths = [...months].sort((a, b) => {
         const dateA = new Date(a);
         const dateB = new Date(b);
@@ -30,9 +32,19 @@ function getFirstAndLastDayOfMonths(months: string[]) {
     const firstMonth = new Date(sortedMonths[0]);
     const startDate = new Date(firstMonth.getFullYear(), firstMonth.getMonth(), 1);
 
-    // Get last day of last month
+    // Get last day of last month - FIXED VERSION
     const lastMonth = new Date(sortedMonths[sortedMonths.length - 1]);
-    const endDate = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0);
+    let endYear = lastMonth.getFullYear();
+    let endMonth = lastMonth.getMonth() + 1;
+
+    // Handle year rollover
+    if (endMonth > 11) {  // if past December
+        endMonth = 0;     // set to January
+        endYear++;        // increment year
+    }
+
+    // Get the last day by getting day 0 of next month
+    const endDate = new Date(endYear, endMonth, 0);
 
     return { startDate, endDate };
 }
@@ -40,16 +52,16 @@ function getFirstAndLastDayOfMonths(months: string[]) {
 export async function createPackage(data: {
     name: string
     price: number
-    startDate?: Date
-    endDate?: Date
+    startDate?: string
+    endDate?: string
     months?: string[]
     programId: number
     memo?: string | null
     entryFees: number
     entryFeesExplanation?: string
     entryFeesAppliedUntil?: string[]
-    entryFeesStartDate?: Date
-    entryFeesEndDate?: Date
+    entryFeesStartDate?: string
+    entryFeesEndDate?: string
     schedules: Schedule[]
     capacity: number
     type: 'Monthly' | 'Term' | 'Full Season' | 'Assessment'
@@ -68,8 +80,8 @@ export async function createPackage(data: {
 
             if (data.type === 'Monthly' && data.months && data.months.length > 0) {
                 const dates = getFirstAndLastDayOfMonths(data.months);
-                startDate = dates.startDate;
-                endDate = dates.endDate;
+                startDate = formatDateForDB(dates.startDate);
+                endDate = formatDateForDB(dates.endDate);
             }
 
             const [newPackage] = await tx
@@ -77,8 +89,8 @@ export async function createPackage(data: {
                 .values({
                     name: data.name,
                     price: data.price,
-                    startDate: formatDateForDB(startDate!),
-                    endDate: formatDateForDB(endDate!),
+                    startDate: startDate!,
+                    endDate: endDate!,
                     months: data.type === 'Monthly' ? data.months : null,
                     programId: data.programId,
                     memo: data.memo,
@@ -86,9 +98,9 @@ export async function createPackage(data: {
                     entryFeesExplanation: data.entryFeesExplanation,
                     entryFeesAppliedUntil: data.entryFeesAppliedUntil || null,
                     entryFeesStartDate: data.entryFeesStartDate ?
-                        formatDateForDB(data.entryFeesStartDate) : null,
+                        data.entryFeesStartDate : null,
                     entryFeesEndDate: data.entryFeesEndDate ?
-                        formatDateForDB(data.entryFeesEndDate) : null,
+                        data.entryFeesEndDate : null,
                     createdAt: sql`now()`,
                     updatedAt: sql`now()`,
                     sessionPerWeek: data.schedules.length,
@@ -109,12 +121,15 @@ export async function createPackage(data: {
                             memo: schedule.memo,
                             createdAt: sql`now()`,
                             updatedAt: sql`now()`,
+                            startDateOfBirth: schedule.startDateOfBirth,
+                            endDateOfBirth: schedule.endDateOfBirth,
+                            gender: schedule.gender
                         }))
                     )
             }
 
-            revalidatePath('/academy/academy/programs')
-            revalidatePath('/academy/academy/assessments')
+            revalidatePath('/academy/programs')
+            revalidatePath('/academy/assessments')
             return { data: newPackage, error: null }
         })
     } catch (error) {
@@ -126,15 +141,15 @@ export async function createPackage(data: {
 export async function updatePackage(id: number, data: {
     name: string
     price: number
-    startDate?: Date
-    endDate?: Date
+    startDate?: string
+    endDate?: string
     months?: string[]
     memo?: string | null
     entryFees: number
     entryFeesExplanation?: string
     entryFeesAppliedUntil?: string[]
-    entryFeesStartDate?: Date
-    entryFeesEndDate?: Date
+    entryFeesStartDate?: string
+    entryFeesEndDate?: string
     schedules: Schedule[]
     capacity: number
     type: 'Monthly' | 'Term' | 'Full Season' | 'Assessment'
@@ -153,26 +168,29 @@ export async function updatePackage(id: number, data: {
 
             if (data.type === 'Monthly' && data.months && data.months.length > 0) {
                 const dates = getFirstAndLastDayOfMonths(data.months);
-                startDate = dates.startDate;
-                endDate = dates.endDate;
+                startDate = formatDateForDB(dates.startDate);
+                endDate = formatDateForDB(dates.endDate);
             }
+
+            console.log("START DATE FROM UPDATE", startDate)
+            console.log("END DATE FROM UPDATE", endDate)
 
             await tx
                 .update(packages)
                 .set({
                     name: data.name,
                     price: data.price,
-                    startDate: formatDateForDB(startDate!),
-                    endDate: formatDateForDB(endDate!),
+                    startDate: startDate!,
+                    endDate: endDate!,
                     months: data.type === 'Monthly' ? data.months : null,
                     memo: data.memo,
                     entryFees: data.entryFees,
                     entryFeesExplanation: data.entryFeesExplanation,
                     entryFeesAppliedUntil: data.entryFeesAppliedUntil || null,
                     entryFeesStartDate: data.entryFeesStartDate ?
-                        formatDateForDB(data.entryFeesStartDate) : null,
+                        data.entryFeesStartDate : null,
                     entryFeesEndDate: data.entryFeesEndDate ?
-                        formatDateForDB(data.entryFeesEndDate) : null,
+                        data.entryFeesEndDate : null,
                     updatedAt: sql`now()`,
                     sessionPerWeek: data.schedules.length,
                     capacity: data.capacity
@@ -190,6 +208,10 @@ export async function updatePackage(id: number, data: {
             const schedulesToDelete = currentScheduleIds.filter(id =>
                 !data.schedules.find(s => s.id === id)
             )
+
+            console.log("SCHEDULES TO DELETE", schedulesToDelete)
+            console.log("SCHEDULES TO UPDATE", schedulesToUpdate)
+            console.log("NEW SCHEDULES", newSchedules)
 
             if (schedulesToDelete.length > 0) {
                 await tx
@@ -212,6 +234,9 @@ export async function updatePackage(id: number, data: {
                             memo: schedule.memo,
                             createdAt: sql`now()`,
                             updatedAt: sql`now()`,
+                            startDateOfBirth: schedule.startDateOfBirth,
+                            endDateOfBirth: schedule.endDateOfBirth,
+                            gender: schedule.gender
                         }))
                     )
             }
@@ -224,14 +249,17 @@ export async function updatePackage(id: number, data: {
                         from: schedule.from,
                         to: schedule.to,
                         memo: schedule.memo,
-                        updatedAt: sql`now()`
+                        updatedAt: sql`now()`,
+                        startDateOfBirth: schedule.startDateOfBirth,
+                        endDateOfBirth: schedule.endDateOfBirth,
+                        gender: schedule.gender
                     })
                     .where(eq(schedules.id, schedule.id!))
             }
         })
 
-        revalidatePath('/academy/academy/programs')
-        revalidatePath('/academy/academy/assessments')
+        revalidatePath('/academy/programs')
+        revalidatePath('/academy/assessments')
         return { success: true, error: null }
     } catch (error) {
         console.error('Error updating package:', error)
@@ -281,7 +309,10 @@ export async function getProgramPackages(url: string | null, programId: number) 
                     'day', ${schedules.day},
                     'from', ${schedules.from},
                     'to', ${schedules.to},
-                    'memo', ${schedules.memo}
+                    'memo', ${schedules.memo},
+                    'startDateOfBirth', ${schedules.startDateOfBirth},
+                    'endDateOfBirth', ${schedules.endDateOfBirth},
+                    'gender', ${schedules.gender}
                 )
                 ORDER BY ${schedules.createdAt} ASC
             )`
