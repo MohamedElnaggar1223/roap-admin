@@ -249,6 +249,7 @@ export default function AcademicsContainer() {
 	const [searchInput, setSearchInput] = useState('')
 	const [searchQuery, setSearchQuery] = useState('')
 	const [filteredAcademics, setFilteredAcademics] = useState<Academic[]>([])
+	const [totalAcademics, setTotalAcademics] = useState<number>(0)
 	const router = useRouter()
 
 	const fetchAcademics = (page: number, pageSize: number) => {
@@ -256,6 +257,7 @@ export default function AcademicsContainer() {
 			const result = await getPaginatedAcademics(page, pageSize)
 			setAcademics(result?.data)
 			setMeta(result?.meta)
+			setTotalAcademics(result?.meta.totalItems || 0)
 		})
 	}
 
@@ -350,6 +352,16 @@ export default function AcademicsContainer() {
 		<div className="flex flex-col w-full items-center justify-center h-full gap-6">
 			<div className="flex max-w-7xl items-center justify-between gap-2 w-full">
 				<h1 className="text-3xl font-bold">Academics</h1>
+				<div className="flex items-center gap-2">
+					<span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+						Total Academics: {totalAcademics}
+					</span>
+					{filteredAcademics.length !== totalAcademics && (
+						<span className="text-sm text-gray-500">
+							(Showing {filteredAcademics.length})
+						</span>
+					)}
+				</div>
 				<div className="flex items-center gap-2">
 					{selectedRows.length > 0 && (
 						<Button
