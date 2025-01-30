@@ -19,6 +19,32 @@ import { getAssessments } from './assessments.actions';
 import { getAllSpokenLanguages } from './spoken-languages.actions';
 import { cookies } from 'next/headers';
 
+export const getTotalBranches = async () => {
+	const isAdminRes = await isAdmin()
+
+	if (!isAdminRes) return {
+		data: 0,
+		error: 'You are not authorized to perform this action',
+	}
+
+	try {
+		const [{ count }] = await db
+			.select({ count: sql`count(*)`.mapWith(Number) })
+			.from(branches)
+
+		return {
+			data: count,
+			error: null,
+		}
+	} catch (error) {
+		console.error('Error getting total branches:', error)
+		return {
+			data: 0,
+			error: 'Failed to get total branches count',
+		}
+	}
+}
+
 export const getAcademyDetails = async () => {
 	const session = await auth()
 

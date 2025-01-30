@@ -30,7 +30,7 @@ import {
 	Trash2Icon,
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { acceptAcademic, deleteAcademics, getPaginatedAcademics, rejectAcademic, toggleAcademicHidden } from '@/lib/actions/academics.actions'
+import { acceptAcademic, deleteAcademics, getPaginatedAcademics, getTotalBranches, rejectAcademic, toggleAcademicHidden } from '@/lib/actions/academics.actions'
 import { useRouter } from 'next/navigation'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -250,14 +250,20 @@ export default function AcademicsContainer() {
 	const [searchQuery, setSearchQuery] = useState('')
 	const [filteredAcademics, setFilteredAcademics] = useState<Academic[]>([])
 	const [totalAcademics, setTotalAcademics] = useState<number>(0)
+	const [totalBranches, setTotalBranches] = useState<number>(0)
 	const router = useRouter()
 
 	const fetchAcademics = (page: number, pageSize: number) => {
 		startTransition(async () => {
-			const result = await getPaginatedAcademics(page, pageSize)
-			setAcademics(result?.data)
-			setMeta(result?.meta)
-			setTotalAcademics(result?.meta.totalItems || 0)
+			const [academicsResult, branchesResult] = await Promise.all([
+				getPaginatedAcademics(page, pageSize),
+				getTotalBranches()
+			])
+
+			setAcademics(academicsResult?.data)
+			setMeta(academicsResult?.meta)
+			setTotalAcademics(academicsResult?.meta.totalItems || 0)
+			setTotalBranches(branchesResult?.data || 0)
 		})
 	}
 
@@ -355,6 +361,9 @@ export default function AcademicsContainer() {
 				<div className="flex items-center gap-2">
 					<span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
 						Total Academics: {totalAcademics}
+					</span>
+					<span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+						Total Branches: {totalBranches}
 					</span>
 					{filteredAcademics.length !== totalAcademics && (
 						<span className="text-sm text-gray-500">
