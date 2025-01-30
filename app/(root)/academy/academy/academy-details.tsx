@@ -212,18 +212,39 @@ export default function AcademyDetails({ academyDetails, sports }: Props) {
             })
 
             if (result.error) {
-                if (result?.field) {
+                // Reset sports selection if error is related to sports
+                if (result.field === 'sports') {
+                    setSelectedSports(academyDetails.sports ?? []);
+                    form.reset({
+                        policy: academyDetails.policy ?? '',
+                        entryFees: academyDetails.entryFees ?? 0,
+                        extra: academyDetails.extra ?? '',
+                        name: academyDetails.name ?? '',
+                        logo: academyDetails.logo ?? '',
+                        description: academyDetails.description ?? '',
+                        gallery: academyDetails.gallery ?? [],
+                    });
+                    toast({
+                        title: "Error",
+                        description: result.error,
+                        variant: "destructive"
+                    });
+                    return;
+                }
+
+                if (result.field) {
                     form.setError(result.field as any, {
                         type: 'custom',
                         message: result.error
-                    })
-                    return
+                    });
+                    return;
                 }
+
                 form.setError('root', {
                     type: 'custom',
                     message: result.error
-                })
-                return
+                });
+                return;
             }
 
             if (selectedImage.preview) {

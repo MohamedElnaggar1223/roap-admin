@@ -497,18 +497,35 @@ export async function updateLocation(id: number, data: {
 export async function deleteLocations(ids: number[]) {
     const session = await auth()
 
-    if (!session?.user || session.user.role !== 'academic') {
-        return { error: 'Unauthorized' }
+    if (!session?.user) {
+        return { error: 'You are not authorized to perform this action', field: null, data: [] }
     }
 
-    await Promise.all(ids.map(async id => await db.delete(branches).where(eq(branches.id, id))))
+    const cookieStore = await cookies()
+    const impersonatedId = session.user.role === 'admin'
+        ? cookieStore.get('impersonatedAcademyId')?.value
+        : null
+
+    // Build the where condition based on user role and impersonation
+    const academicId = session.user.role === 'admin' && impersonatedId
+        ? parseInt(impersonatedId)
+        : parseInt(session.user.id)
+
+    // If not admin and not academic, return error
+    if (session.user.role !== 'admin' && session.user.role !== 'academic') {
+        return { error: 'You are not authorized to perform this action', field: null, data: [] }
+    }
 
     const academy = await db.query.academics.findFirst({
-        where: (academics, { eq }) => eq(academics.userId, parseInt(session.user.id)),
+        where: (academics, { eq }) => eq(academics.userId, academicId),
         columns: {
             id: true,
         }
     })
+
+    if (!academy) return { error: 'Academy not found' }
+
+    await Promise.all(ids.map(async id => await db.delete(branches).where(eq(branches.id, id))))
 
     revalidateTag(`locations-${academy?.id}`)
     return { success: true }
