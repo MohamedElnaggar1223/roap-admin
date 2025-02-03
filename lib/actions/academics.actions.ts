@@ -252,6 +252,58 @@ export const getAcademyDetailsClient = async (url: string | null) => {
 	return finalAcademyDetails
 }
 
+export const getTotalSports = async () => {
+	const isAdminRes = await isAdmin()
+
+	if (!isAdminRes) return {
+		data: 0,
+		error: 'You are not authorized to perform this action',
+	}
+
+	try {
+		const [{ count }] = await db
+			.select({ count: sql`count(*)`.mapWith(Number) })
+			.from(academicSport)
+
+		return {
+			data: count,
+			error: null,
+		}
+	} catch (error) {
+		console.error('Error getting total branches:', error)
+		return {
+			data: 0,
+			error: 'Failed to get total branches count',
+		}
+	}
+}
+
+export const getTotalUsers = async () => {
+	const isAdminRes = await isAdmin()
+
+	if (!isAdminRes) return {
+		data: 0,
+		error: 'You are not authorized to perform this action',
+	}
+
+	try {
+		const [{ count }] = await db
+			.select({ count: sql`count(*)`.mapWith(Number) })
+			.from(users)
+
+		return {
+			data: count,
+			error: null,
+		}
+	} catch (error) {
+		console.error('Error getting total branches:', error)
+		return {
+			data: 0,
+			error: 'Failed to get total branches count',
+		}
+	}
+}
+
 export async function getPaginatedAcademics(
 	page: number = 1,
 	pageSize: number = 10,

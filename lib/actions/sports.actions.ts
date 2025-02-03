@@ -8,6 +8,32 @@ import { getImageUrl } from '../supabase-images'
 import { revalidatePath } from 'next/cache'
 import { slugify } from '../utils'
 
+export const getTotalSports = async () => {
+    const isAdminRes = await isAdmin()
+
+    if (!isAdminRes) return {
+        data: 0,
+        error: 'You are not authorized to perform this action',
+    }
+
+    try {
+        const [{ count }] = await db
+            .select({ count: sql`count(*)`.mapWith(Number) })
+            .from(sports)
+
+        return {
+            data: count,
+            error: null,
+        }
+    } catch (error) {
+        console.error('Error getting total branches:', error)
+        return {
+            data: 0,
+            error: 'Failed to get total branches count',
+        }
+    }
+}
+
 export async function getPaginatedSports(
     page: number = 1,
     pageSize: number = 10,

@@ -29,7 +29,7 @@ import {
     PlusIcon,
     Trash2Icon,
 } from "lucide-react"
-import { deleteSports, getPaginatedSports } from '@/lib/actions/sports.actions'
+import { deleteSports, getPaginatedSports, getTotalSports } from '@/lib/actions/sports.actions'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -64,13 +64,18 @@ export default function SportsTable() {
     const [selectedRows, setSelectedRows] = useState<number[]>([])
     const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false)
     const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+    const [totalSports, setTotalSports] = useState<number>(0)
 
     const fetchSports = (page: number, pageSize: number) => {
         startTransition(async () => {
-            const result = await getPaginatedSports(page, pageSize)
+            const [result, sportsResult] = await Promise.all([
+                getPaginatedSports(page, pageSize),
+                getTotalSports(),
+            ])
             setSports(result?.data)
             setMeta(result?.meta)
             setSelectedRows([])
+            setTotalSports(sportsResult?.data || 0)
         })
     }
 
@@ -112,6 +117,11 @@ export default function SportsTable() {
             <div className="flex flex-col w-full items-center justify-start h-full gap-6">
                 <div className="flex max-w-7xl items-center justify-between gap-2 w-full">
                     <h1 className="text-3xl font-bold">Sports</h1>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                            Total Sports: {totalSports}
+                        </span>
+                    </div>
                     <div className="flex items-center gap-2">
                         {selectedRows.length > 0 && (
                             <Button
