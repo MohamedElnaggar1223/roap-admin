@@ -91,6 +91,7 @@ const AcademicsTable = ({ academics, selectedRows, onSelectRow, onSelectAll, han
 		setRejectAcademicLoading(true)
 		await rejectAcademic(rejectAcademicId)
 		setRejectAcademicLoading(false)
+		setRejectAcademicOpen(false)
 		router.refresh()
 		setRefetch((prev) => !prev)
 	}
