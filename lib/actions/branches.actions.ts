@@ -1,16 +1,10 @@
 'use server'
 
 import { db } from "@/db"
-import { branches, academics, academicTranslations } from "@/db/schema"
+import { branches, academics, academicTranslations, branchSport, sports, sportTranslations } from "@/db/schema"
 import { inArray, sql, asc, desc, SQL } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { isAdmin } from "../admin"
-
-type FilterOptions = {
-    academicName: string
-    hidden: string
-    isDefault: string
-}
 
 export async function getPaginatedBranches(
     page: number = 1,
@@ -30,11 +24,12 @@ export async function getPaginatedBranches(
 
     const offset = (page - 1) * pageSize
 
-    const data = await db
+    const branchesWithTranslations = await db
         .select({
             id: branches.id,
             name: sql<string>`bt.name`,
             academicName: sql<string>`at.name`,
+            academicId: branches.academicId,
             latitude: branches.latitude,
             longitude: branches.longitude,
             isDefault: branches.isDefault,
@@ -92,6 +87,61 @@ export async function getPaginatedBranches(
             sql`at.academic_id = ${academics.id}`
         )
         .orderBy(orderBy)
+
+    const branchIds = branchesWithTranslations.map(branch => branch.id);
+
+    const branchSportsResult = await db
+        .select({
+            branchId: branchSport.branchId,
+            sportId: sports.id,
+            sportName: sql<string>`st.name`,
+        })
+        .from(branchSport)
+        .leftJoin(
+            sports,
+            sql`${branchSport.sportId} = ${sports.id}`
+        )
+        .leftJoin(
+            sql`(
+                SELECT st.sport_id, st.name, st.locale
+                FROM sport_translations st
+                WHERE st.locale = 'en'
+                UNION
+                SELECT st2.sport_id, st2.name, st2.locale
+                FROM sport_translations st2
+                INNER JOIN (
+                    SELECT sport_id, MIN(locale) as first_locale
+                    FROM sport_translations
+                    WHERE sport_id NOT IN (
+                        SELECT sport_id
+                        FROM sport_translations
+                        WHERE locale = 'en'
+                    )
+                    GROUP BY sport_id
+                ) first_trans ON st2.sport_id = first_trans.sport_id
+                AND st2.locale = first_trans.first_locale
+            ) st`,
+            sql`st.sport_id = ${sports.id}`
+        )
+        .where(inArray(branchSport.branchId, branchIds))
+
+    // Organize sports by branch
+    const sportsByBranch = new Map();
+    branchSportsResult.forEach(item => {
+        if (!sportsByBranch.has(item.branchId)) {
+            sportsByBranch.set(item.branchId, []);
+        }
+        sportsByBranch.get(item.branchId).push({
+            id: item.sportId,
+            name: item.sportName
+        });
+    });
+
+    // Combine branch data with sports
+    const data = branchesWithTranslations.map(branch => ({
+        ...branch,
+        sports: sportsByBranch.get(branch.id) || []
+    }));
 
     // Get the total count of branches
     const [{ count }] = await db

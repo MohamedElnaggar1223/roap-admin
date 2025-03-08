@@ -19,10 +19,13 @@ import {
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
+    ChevronDownIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
+    ChevronUpIcon,
     ChevronsLeftIcon,
     ChevronsRightIcon,
+    Eye,
     Filter,
     Loader2,
     Trash2Icon,
@@ -32,12 +35,16 @@ import { useRouter } from 'next/navigation'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import Link from 'next/link'
 
 type Athlete = {
     id: number
     profileName: string | null
     academicName: string | null
+    academicId: number | null
     sportName: string | null
+    sportId: number | null
     type: 'primary' | 'fellow' | null
     userName: string | null
     userEmail: string | null
@@ -62,6 +69,13 @@ type FilterState = {
     userEmail: string
 }
 
+type AcademicGroup = {
+    academicId: number
+    academicName: string
+    athletes: Athlete[]
+    isExpanded: boolean
+}
+
 export default function AthletesTable() {
     const router = useRouter()
 
@@ -84,6 +98,7 @@ export default function AthletesTable() {
         userName: '',
         userEmail: '',
     })
+    const [expandedAcademics, setExpandedAcademics] = useState<number[]>([])
 
     const fetchAthletes = () => {
         startTransition(async () => {
@@ -96,6 +111,10 @@ export default function AthletesTable() {
                     totalItems: result.data.length,
                     totalPages: Math.ceil(result.data.length / meta.pageSize)
                 })
+
+                // Expand all academics by default
+                const academicIds = [...new Set(result.data.map(athlete => athlete.academicId))];
+                setExpandedAcademics(academicIds as number[]);
             }
             setSelectedRows([])
         })
@@ -104,6 +123,24 @@ export default function AthletesTable() {
     useEffect(() => {
         fetchAthletes()
     }, [])
+
+    // Get all unique sports from athletes
+    const availableSports = useMemo(() => {
+        const sportsMap = new Map<number, { id: number, name: string }>();
+
+        allAthletes.forEach(athlete => {
+            if (athlete.sportId && athlete.sportName) {
+                if (!sportsMap.has(athlete.sportId)) {
+                    sportsMap.set(athlete.sportId, {
+                        id: athlete.sportId,
+                        name: athlete.sportName
+                    });
+                }
+            }
+        });
+
+        return Array.from(sportsMap.values());
+    }, [allAthletes]);
 
     // Apply filters in memory
     const filteredAthletes = useMemo(() => {
@@ -147,12 +184,34 @@ export default function AthletesTable() {
         })
     }, [allAthletes, filters])
 
-    // Calculate pagination
-    const paginatedAthletes = useMemo(() => {
-        const startIndex = (meta.page - 1) * meta.pageSize
-        const endIndex = startIndex + meta.pageSize
-        return filteredAthletes.slice(startIndex, endIndex)
-    }, [filteredAthletes, meta.page, meta.pageSize])
+    // Group athletes by academic
+    const academicGroups = useMemo(() => {
+        const groups = new Map<number, Athlete[]>();
+
+        filteredAthletes.forEach(athlete => {
+            if (athlete.academicId) {
+                if (!groups.has(athlete.academicId)) {
+                    groups.set(athlete.academicId, []);
+                }
+                groups.get(athlete.academicId)!.push(athlete);
+            }
+        });
+
+        return Array.from(groups.entries()).map(([academicId, athletes]) => ({
+            academicId,
+            academicName: athletes[0]?.academicName || 'Unknown Academic',
+            athletes,
+            isExpanded: expandedAcademics.includes(academicId)
+        }));
+    }, [filteredAthletes, expandedAcademics]);
+
+    const handleToggleAcademicExpand = (academicId: number) => {
+        setExpandedAcademics(prev =>
+            prev.includes(academicId)
+                ? prev.filter(id => id !== academicId)
+                : [...prev, academicId]
+        );
+    };
 
     // Update meta information when filters change
     useEffect(() => {
@@ -164,33 +223,40 @@ export default function AthletesTable() {
         }))
     }, [filteredAthletes, meta.pageSize])
 
-    const handlePageChange = (newPage: number) => {
-        setMeta(prev => ({
-            ...prev,
-            page: newPage
-        }))
-    }
-
-    const handlePageSizeChange = (newPageSize: string) => {
-        const size = parseInt(newPageSize)
-        setMeta(prev => ({
-            ...prev,
-            page: 1,
-            pageSize: size,
-            totalPages: Math.ceil(filteredAthletes.length / size) || 1
-        }))
-    }
-
     const handleRowSelect = (id: number) => {
         setSelectedRows(prev =>
             prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id]
         )
     }
 
+    const handleSelectAllInGroup = (academicId: number) => {
+        const athleteIdsInGroup = academicGroups
+            .find(g => g.academicId === academicId)?.athletes
+            .map(athlete => athlete.id) || [];
+
+        const allSelected = athleteIdsInGroup.every(id => selectedRows.includes(id));
+
+        if (allSelected) {
+            // Unselect all in this group
+            setSelectedRows(prev => prev.filter(id => !athleteIdsInGroup.includes(id)));
+        } else {
+            // Select all in this group
+            const newSelectedRows = [...selectedRows];
+            athleteIdsInGroup.forEach(id => {
+                if (!newSelectedRows.includes(id)) {
+                    newSelectedRows.push(id);
+                }
+            });
+            setSelectedRows(newSelectedRows);
+        }
+    };
+
     const handleSelectAll = () => {
-        setSelectedRows(
-            selectedRows.length === paginatedAthletes.length ? [] : paginatedAthletes.map(athlete => athlete.id)
-        )
+        if (selectedRows.length === filteredAthletes.length) {
+            setSelectedRows([]);
+        } else {
+            setSelectedRows(filteredAthletes.map(athlete => athlete.id));
+        }
     }
 
     const handleBulkDelete = async () => {
@@ -249,118 +315,121 @@ export default function AthletesTable() {
                     </div>
                 </div>
                 <div className="space-y-4 max-w-7xl w-full border rounded-2xl p-4 bg-[#fafafa]">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[50px]">
-                                    <Checkbox
-                                        checked={selectedRows.length === paginatedAthletes.length && paginatedAthletes.length > 0}
-                                        onCheckedChange={handleSelectAll}
-                                        aria-label="Select all"
-                                    />
-                                </TableHead>
-                                <TableHead>Profile</TableHead>
-                                <TableHead>User</TableHead>
-                                <TableHead>Email</TableHead>
-                                <TableHead>Phone</TableHead>
-                                <TableHead>Academic</TableHead>
-                                <TableHead>Sport</TableHead>
-                                {/* <TableHead>Type</TableHead> */}
-                                {/* <TableHead>Certificate</TableHead> */}
-                                <TableHead>Guardian</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {paginatedAthletes.map((athlete) => (
-                                <TableRow key={athlete.id.toString()}>
-                                    <TableCell>
-                                        <Checkbox
-                                            checked={selectedRows.includes(athlete.id)}
-                                            onCheckedChange={() => handleRowSelect(athlete.id)}
-                                            aria-label={`Select ${athlete.profileName}`}
-                                        />
-                                    </TableCell>
-                                    <TableCell>{athlete.profileName || "-"}</TableCell>
-                                    <TableCell>{athlete.userName || "-"}</TableCell>
-                                    <TableCell>{athlete.userEmail || "-"}</TableCell>
-                                    <TableCell>{athlete.userPhone || "-"}</TableCell>
-                                    <TableCell>{athlete.academicName || "-"}</TableCell>
-                                    <TableCell>{athlete.sportName || "-"}</TableCell>
-                                    {/* <TableCell>
-                                        {athlete.type === 'primary' ? "Primary" : "Fellow"}
-                                    </TableCell> */}
-                                    {/* <TableCell>
-                                        {athlete.certificate ? "Yes" : "No"}
-                                    </TableCell> */}
-                                    <TableCell>
-                                        {athlete.firstGuardianName || "-"}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                            <p className="text-sm font-medium">Rows per page</p>
-                            <Select
-                                value={meta.pageSize.toString()}
-                                onValueChange={handlePageSizeChange}
-                                disabled={isPending}
+                    {academicGroups.map((group) => (
+                        <div key={group.academicId} className="mb-6 border rounded-lg overflow-hidden">
+                            <div
+                                className="bg-gray-100 p-3 flex items-center justify-between cursor-pointer"
+                                onClick={() => handleToggleAcademicExpand(group.academicId)}
                             >
-                                <SelectTrigger className="h-8 w-[70px]">
-                                    <SelectValue placeholder={meta.pageSize} />
-                                </SelectTrigger>
-                                <SelectContent side="top">
-                                    {[10, 20, 30, 40, 50].map((size) => (
-                                        <SelectItem key={size} value={size.toString()}>
-                                            {size}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                                <div className="flex items-center gap-2">
+                                    {group.isExpanded ?
+                                        <ChevronUpIcon className="h-5 w-5" /> :
+                                        <ChevronDownIcon className="h-5 w-5" />
+                                    }
+                                    <h3 className="font-semibold text-lg">
+                                        {group.academicName}
+                                    </h3>
+                                    <Badge className="ml-2">{group.athletes.length} Athletes</Badge>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Checkbox
+                                        checked={group.athletes.every(athlete => selectedRows.includes(athlete.id)) && group.athletes.length > 0}
+                                        onCheckedChange={() => handleSelectAllInGroup(group.academicId)}
+                                        aria-label={`Select all athletes for ${group.academicName}`}
+                                        onClick={(e) => e.stopPropagation()}
+                                    />
+                                </div>
+                            </div>
+
+                            {group.isExpanded && (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="w-[50px]">
+                                                <Checkbox
+                                                    checked={group.athletes.every(athlete =>
+                                                        selectedRows.includes(athlete.id)) && group.athletes.length > 0}
+                                                    onCheckedChange={() => handleSelectAllInGroup(group.academicId)}
+                                                    aria-label={`Select all athletes for ${group.academicName}`}
+                                                />
+                                            </TableHead>
+                                            <TableHead>Profile</TableHead>
+                                            <TableHead>Username</TableHead>
+                                            <TableHead>Sport</TableHead>
+                                            <TableHead>Email</TableHead>
+                                            <TableHead>Phone number</TableHead>
+                                            <TableHead>Guardian</TableHead>
+                                            <TableHead className="text-right">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {group.athletes.map((athlete) => (
+                                            <TableRow key={athlete.id.toString()}>
+                                                <TableCell>
+                                                    <Checkbox
+                                                        checked={selectedRows.includes(athlete.id)}
+                                                        onCheckedChange={() => handleRowSelect(athlete.id)}
+                                                        aria-label={`Select ${athlete.profileName}`}
+                                                    />
+                                                </TableCell>
+                                                <TableCell className="font-medium">{athlete.profileName || "-"}</TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-col">
+                                                        <span>{athlete.userName || "-"}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {athlete.sportName ? (
+                                                        <Badge variant="outline">{athlete.sportName}</Badge>
+                                                    ) : "-"}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <span className="text-sm text-gray-500">{athlete.userEmail || ""}</span>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <span className="text-sm text-gray-500">{athlete.userPhone || ""}</span>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {athlete.firstGuardianName ? (
+                                                        <div className="flex flex-col">
+                                                            <span>{athlete.firstGuardianName}</span>
+                                                            <span className="text-sm text-gray-500">{athlete.firstGuardianPhone || ""}</span>
+                                                        </div>
+                                                    ) : "-"}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <Link href={`/athletes/${athlete.id}`}>
+                                                        <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+                                                            <Eye className="h-4 w-4" />
+                                                            <span className="sr-only">View</span>
+                                                        </Button>
+                                                    </Link>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            )}
+                        </div>
+                    ))}
+
+                    {isPending ? (
+                        <div className="flex items-center justify-center h-full">
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                        </div>
+                    ) : academicGroups.length === 0 && (
+                        <div className="text-center py-8 text-gray-500">
+                            No athletes found matching the current filters.
+                        </div>
+                    )}
+
+                    <div className="flex items-center justify-between mt-4">
+                        <div className="text-sm text-gray-500">
+                            {selectedRows.length} of {filteredAthletes.length} athletes selected
                         </div>
 
                         <div className="flex items-center space-x-2">
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => handlePageChange(1)}
-                                disabled={meta.page === 1 || isPending}
-                            >
-                                <ChevronsLeftIcon className="h-4 w-4" />
-                                <span className="sr-only">First page</span>
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => handlePageChange(meta.page - 1)}
-                                disabled={meta.page === 1 || isPending}
-                            >
-                                <ChevronLeftIcon className="h-4 w-4" />
-                                <span className="sr-only">Previous page</span>
-                            </Button>
-                            <span className="text-sm">
-                                Page {meta.page} of {meta.totalPages}
-                            </span>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => handlePageChange(meta.page + 1)}
-                                disabled={meta.page === meta.totalPages || isPending}
-                            >
-                                <ChevronRightIcon className="h-4 w-4" />
-                                <span className="sr-only">Next page</span>
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => handlePageChange(meta.totalPages)}
-                                disabled={meta.page === meta.totalPages || isPending}
-                            >
-                                <ChevronsRightIcon className="h-4 w-4" />
-                                <span className="sr-only">Last page</span>
-                            </Button>
+                            <p className="text-sm font-medium">Total athletes: {filteredAthletes.length}</p>
                         </div>
                     </div>
                 </div>

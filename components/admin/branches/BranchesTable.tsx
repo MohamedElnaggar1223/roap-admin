@@ -19,8 +19,10 @@ import {
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
+    ChevronDownIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
+    ChevronUpIcon,
     ChevronsLeftIcon,
     ChevronsRightIcon,
     Filter,
@@ -32,17 +34,25 @@ import { useRouter } from 'next/navigation'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+
+type Sport = {
+    id: number
+    name: string
+}
 
 type Branch = {
     id: number
     name: string | null
     academicName: string | null
+    academicId: number | null
     latitude: string | null
     longitude: string | null
     isDefault: boolean
     rate: number | null
     reviews: number | null
     hidden: boolean
+    sports: Sport[]
 }
 
 type PaginationMeta = {
@@ -56,6 +66,14 @@ type FilterState = {
     academicName: string
     hidden: string
     isDefault: string
+    sportId: string
+}
+
+type AcademicGroup = {
+    academicId: number
+    academicName: string
+    branches: Branch[]
+    isExpanded: boolean
 }
 
 export default function BranchesTable() {
@@ -77,7 +95,9 @@ export default function BranchesTable() {
         academicName: '',
         hidden: 'all',
         isDefault: 'all',
+        sportId: 'all',
     })
+    const [expandedAcademics, setExpandedAcademics] = useState<number[]>([])
 
     const fetchBranches = () => {
         startTransition(async () => {
@@ -90,6 +110,10 @@ export default function BranchesTable() {
                     totalItems: result.data.length,
                     totalPages: Math.ceil(result.data.length / meta.pageSize)
                 })
+
+                // Expand all academics by default
+                const academicIds = [...new Set(result.data.map(branch => branch.academicId))];
+                setExpandedAcademics(academicIds as number[]);
             }
             setSelectedRows([])
         })
@@ -98,6 +122,21 @@ export default function BranchesTable() {
     useEffect(() => {
         fetchBranches()
     }, [])
+
+    // Get all unique sports from branches
+    const availableSports = useMemo(() => {
+        const sportsMap = new Map<number, Sport>();
+
+        allBranches.forEach(branch => {
+            branch.sports?.forEach(sport => {
+                if (!sportsMap.has(sport.id)) {
+                    sportsMap.set(sport.id, sport);
+                }
+            });
+        });
+
+        return Array.from(sportsMap.values());
+    }, [allBranches]);
 
     // Apply filters in memory
     const filteredBranches = useMemo(() => {
@@ -125,16 +164,46 @@ export default function BranchesTable() {
                 return false
             }
 
+            // Sport filter
+            if (filters.sportId !== 'all' && branch.sports) {
+                const sportId = parseInt(filters.sportId);
+                if (!branch.sports.some(sport => sport.id === sportId)) {
+                    return false;
+                }
+            }
+
             return true
         })
     }, [allBranches, filters])
 
-    // Calculate pagination
-    const paginatedBranches = useMemo(() => {
-        const startIndex = (meta.page - 1) * meta.pageSize
-        const endIndex = startIndex + meta.pageSize
-        return filteredBranches.slice(startIndex, endIndex)
-    }, [filteredBranches, meta.page, meta.pageSize])
+    // Group branches by academic
+    const academicGroups = useMemo(() => {
+        const groups = new Map<number, Branch[]>();
+
+        filteredBranches.forEach(branch => {
+            if (branch.academicId) {
+                if (!groups.has(branch.academicId)) {
+                    groups.set(branch.academicId, []);
+                }
+                groups.get(branch.academicId)!.push(branch);
+            }
+        });
+
+        return Array.from(groups.entries()).map(([academicId, branches]) => ({
+            academicId,
+            academicName: branches[0]?.academicName || 'Unknown Academic',
+            branches,
+            isExpanded: expandedAcademics.includes(academicId)
+        }));
+    }, [filteredBranches, expandedAcademics]);
+
+    const handleToggleAcademicExpand = (academicId: number) => {
+        setExpandedAcademics(prev =>
+            prev.includes(academicId)
+                ? prev.filter(id => id !== academicId)
+                : [...prev, academicId]
+        );
+    };
 
     // Update meta information when filters change
     useEffect(() => {
@@ -142,7 +211,7 @@ export default function BranchesTable() {
             ...prev,
             page: 1, // Reset to first page when filters change
             totalItems: filteredBranches.length,
-            totalPages: Math.ceil(filteredBranches.length / prev.pageSize)
+            totalPages: Math.ceil(filteredBranches.length / prev.pageSize) || 1
         }))
     }, [filteredBranches, meta.pageSize])
 
@@ -159,7 +228,7 @@ export default function BranchesTable() {
             ...prev,
             page: 1,
             pageSize: size,
-            totalPages: Math.ceil(filteredBranches.length / size)
+            totalPages: Math.ceil(filteredBranches.length / size) || 1
         }))
     }
 
@@ -169,10 +238,34 @@ export default function BranchesTable() {
         )
     }
 
+    const handleSelectAllInGroup = (academicId: number) => {
+        const branchIdsInGroup = academicGroups
+            .find(g => g.academicId === academicId)?.branches
+            .map(branch => branch.id) || [];
+
+        const allSelected = branchIdsInGroup.every(id => selectedRows.includes(id));
+
+        if (allSelected) {
+            // Unselect all in this group
+            setSelectedRows(prev => prev.filter(id => !branchIdsInGroup.includes(id)));
+        } else {
+            // Select all in this group
+            const newSelectedRows = [...selectedRows];
+            branchIdsInGroup.forEach(id => {
+                if (!newSelectedRows.includes(id)) {
+                    newSelectedRows.push(id);
+                }
+            });
+            setSelectedRows(newSelectedRows);
+        }
+    };
+
     const handleSelectAll = () => {
-        setSelectedRows(
-            selectedRows.length === paginatedBranches.length ? [] : paginatedBranches.map(branch => branch.id)
-        )
+        if (selectedRows.length === filteredBranches.length) {
+            setSelectedRows([]);
+        } else {
+            setSelectedRows(filteredBranches.map(branch => branch.id));
+        }
     }
 
     const handleBulkDelete = async () => {
@@ -198,6 +291,7 @@ export default function BranchesTable() {
             academicName: '',
             hidden: '',
             isDefault: '',
+            sportId: '',
         })
         setFiltersOpen(false)
     }
@@ -229,114 +323,107 @@ export default function BranchesTable() {
                     </div>
                 </div>
                 <div className="space-y-4 max-w-7xl w-full border rounded-2xl p-4 bg-[#fafafa]">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[50px]">
-                                    <Checkbox
-                                        checked={selectedRows.length === paginatedBranches.length && paginatedBranches.length > 0}
-                                        onCheckedChange={handleSelectAll}
-                                        aria-label="Select all"
-                                    />
-                                </TableHead>
-                                <TableHead>Name</TableHead>
-                                <TableHead>Academic</TableHead>
-                                <TableHead className="text-center">Default</TableHead>
-                                <TableHead className="text-center">Rating</TableHead>
-                                <TableHead className="text-center">Reviews</TableHead>
-                                <TableHead className="text-center">Hidden</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {paginatedBranches.map((branch) => (
-                                <TableRow key={branch.id.toString()}>
-                                    <TableCell>
-                                        <Checkbox
-                                            checked={selectedRows.includes(branch.id)}
-                                            onCheckedChange={() => handleRowSelect(branch.id)}
-                                            aria-label={`Select ${branch.name}`}
-                                        />
-                                    </TableCell>
-                                    <TableCell>{branch.name}</TableCell>
-                                    <TableCell>{branch.academicName}</TableCell>
-                                    <TableCell className="text-center">
-                                        {branch.isDefault ? "Yes" : "No"}
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                        {branch.rate ? branch.rate.toFixed(1) : "-"}
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                        {branch.reviews || 0}
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                        {branch.hidden ? "Yes" : "No"}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                            <p className="text-sm font-medium">Rows per page</p>
-                            <Select
-                                value={meta.pageSize.toString()}
-                                onValueChange={handlePageSizeChange}
-                                disabled={isPending}
+                    {academicGroups.map((group) => (
+                        <div key={group.academicId} className="mb-6 border rounded-lg overflow-hidden">
+                            <div
+                                className="bg-gray-100 p-3 flex items-center justify-between cursor-pointer"
+                                onClick={() => handleToggleAcademicExpand(group.academicId)}
                             >
-                                <SelectTrigger className="h-8 w-[70px]">
-                                    <SelectValue placeholder={meta.pageSize} />
-                                </SelectTrigger>
-                                <SelectContent side="top">
-                                    {[10, 20, 30, 40, 50].map((size) => (
-                                        <SelectItem key={size} value={size.toString()}>
-                                            {size}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                                <div className="flex items-center gap-2">
+                                    {group.isExpanded ?
+                                        <ChevronUpIcon className="h-5 w-5" /> :
+                                        <ChevronDownIcon className="h-5 w-5" />
+                                    }
+                                    <h3 className="font-semibold text-lg">
+                                        {group.academicName}
+                                    </h3>
+                                    <Badge className="ml-2">{group.branches.length} Branches</Badge>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Checkbox
+                                        checked={group.branches.every(branch => selectedRows.includes(branch.id)) && group.branches.length > 0}
+                                        onCheckedChange={() => handleSelectAllInGroup(group.academicId)}
+                                        aria-label={`Select all branches for ${group.academicName}`}
+                                        onClick={(e) => e.stopPropagation()}
+                                    />
+                                </div>
+                            </div>
+
+                            {group.isExpanded && (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="w-[50px]">
+                                                <Checkbox
+                                                    checked={group.branches.every(branch =>
+                                                        selectedRows.includes(branch.id)) && group.branches.length > 0}
+                                                    onCheckedChange={() => handleSelectAllInGroup(group.academicId)}
+                                                    aria-label={`Select all branches for ${group.academicName}`}
+                                                />
+                                            </TableHead>
+                                            <TableHead>Name</TableHead>
+                                            <TableHead className="text-center">Default</TableHead>
+                                            <TableHead className="text-center">Rating</TableHead>
+                                            <TableHead className="text-center">Reviews</TableHead>
+                                            <TableHead className="text-center">Hidden</TableHead>
+                                            <TableHead>Sports</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {group.branches.map((branch) => (
+                                            <TableRow key={branch.id.toString()}>
+                                                <TableCell>
+                                                    <Checkbox
+                                                        checked={selectedRows.includes(branch.id)}
+                                                        onCheckedChange={() => handleRowSelect(branch.id)}
+                                                        aria-label={`Select ${branch.name}`}
+                                                    />
+                                                </TableCell>
+                                                <TableCell>{branch.name}</TableCell>
+                                                <TableCell className="text-center">
+                                                    {branch.isDefault ? "Yes" : "No"}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {branch.rate ? branch.rate.toFixed(1) : "-"}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {branch.reviews || 0}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {branch.hidden ? "Yes" : "No"}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {branch.sports?.map(sport => (
+                                                            <Badge key={sport.id} variant="outline">{sport.name}</Badge>
+                                                        ))}
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            )}
+                        </div>
+                    ))}
+
+                    {isPending ? (
+                        <div className="flex items-center justify-center h-full">
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                        </div>
+                    ) : academicGroups.length === 0 && (
+                        <div className="text-center py-8 text-gray-500">
+                            No branches found matching the current filters.
+                        </div>
+                    )}
+
+                    <div className="flex items-center justify-between mt-4">
+                        <div className="text-sm text-gray-500">
+                            {selectedRows.length} of {filteredBranches.length} branches selected
                         </div>
 
                         <div className="flex items-center space-x-2">
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => handlePageChange(1)}
-                                disabled={meta.page === 1 || isPending}
-                            >
-                                <ChevronsLeftIcon className="h-4 w-4" />
-                                <span className="sr-only">First page</span>
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => handlePageChange(meta.page - 1)}
-                                disabled={meta.page === 1 || isPending}
-                            >
-                                <ChevronLeftIcon className="h-4 w-4" />
-                                <span className="sr-only">Previous page</span>
-                            </Button>
-                            <span className="text-sm">
-                                Page {meta.page} of {meta.totalPages || 1}
-                            </span>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => handlePageChange(meta.page + 1)}
-                                disabled={meta.page === meta.totalPages || isPending}
-                            >
-                                <ChevronRightIcon className="h-4 w-4" />
-                                <span className="sr-only">Next page</span>
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => handlePageChange(meta.totalPages)}
-                                disabled={meta.page === meta.totalPages || isPending}
-                            >
-                                <ChevronsRightIcon className="h-4 w-4" />
-                                <span className="sr-only">Last page</span>
-                            </Button>
+                            <p className="text-sm font-medium">Total branches: {filteredBranches.length}</p>
                         </div>
                     </div>
                 </div>
@@ -381,6 +468,27 @@ export default function BranchesTable() {
                                     value={filters.academicName}
                                     onChange={(e) => handleFilterChange('academicName', e.target.value)}
                                 />
+                            </div>
+                            <div className="grid gap-3">
+                                <label className="text-sm font-medium leading-none">
+                                    Sport
+                                </label>
+                                <Select
+                                    value={filters.sportId}
+                                    onValueChange={(value) => handleFilterChange('sportId', value)}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select sport" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Sports</SelectItem>
+                                        {availableSports.map(sport => (
+                                            <SelectItem key={sport.id} value={sport.id.toString()}>
+                                                {sport.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
                             <div className="grid gap-3">
                                 <label className="text-sm font-medium leading-none">
