@@ -370,7 +370,7 @@ export default async function AthleteDetailPage({ params }: { params: Promise<{ 
                                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
                                                         <div>
                                                             <div className="text-sm text-gray-500">Price</div>
-                                                            <div>${booking.price.toFixed(2)}</div>
+                                                            <div>{booking.price.toFixed(2)}AED</div>
                                                         </div>
                                                         <div>
                                                             <div className="text-sm text-gray-500">Sessions</div>
