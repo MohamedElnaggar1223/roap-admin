@@ -16,6 +16,7 @@ export async function getPaginatedAthletes(
     pageSize: number = 10,
     orderBy: SQL = asc(academicAthletic.id)
 ) {
+    console.log("GETTING ATHLETES")
     const isAdminRes = await isAdmin()
     if (!isAdminRes) return {
         data: [],

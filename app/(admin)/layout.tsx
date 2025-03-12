@@ -7,6 +7,7 @@ import { auth } from "@/auth"
 import { cn } from "@/lib/utils"
 import { isAdmin } from "@/lib/admin"
 import "../globals.css"
+import QueryProviders from "@/providers/query-provider"
 
 const geistFont = localFont({ src: '../../public/fonts/GeistVF.woff', variable: '--font-geist' })
 
@@ -22,16 +23,18 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
     return (
         <html lang='en'>
             <body>
-                <SidebarProvider className={cn(geistFont.className, geistFont.variable)}>
-                    <AdminSidebar />
-                    <main className='flex flex-col flex-1'>
-                        <AdminHeader>
-                            <section className='p-8'>
-                                {children}
-                            </section>
-                        </AdminHeader>
-                    </main>
-                </SidebarProvider>
+                <QueryProviders>
+                    <SidebarProvider className={cn(geistFont.className, geistFont.variable)}>
+                        <AdminSidebar />
+                        <main className='flex flex-col flex-1'>
+                            <AdminHeader>
+                                <section className='p-8'>
+                                    {children}
+                                </section>
+                            </AdminHeader>
+                        </main>
+                    </SidebarProvider>
+                </QueryProviders>
             </body>
         </html>
     )

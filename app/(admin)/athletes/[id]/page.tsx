@@ -29,17 +29,14 @@ export default async function AthleteDetailPage({ params }: { params: Promise<{ 
 
     const { athlete, bookings, recentSessions } = athleteData
 
-    // Format birthday if exists
     const formattedBirthday = athlete.profileBirthday
         ? format(new Date(athlete.profileBirthday), 'MMMM d, yyyy')
         : 'Not provided'
 
-    // Calculate age if birthday exists
     const age = athlete.profileBirthday
         ? Math.floor((new Date().getTime() - new Date(athlete.profileBirthday).getTime()) / 31557600000)
         : null
 
-    // Get statistics from bookings
     const totalBookings = bookings.length
     const activeBookings = bookings.filter(b => b.status === 'success').length
     const totalSessions = bookings.reduce((acc, booking) => acc + (booking.sessionCount || 0), 0)

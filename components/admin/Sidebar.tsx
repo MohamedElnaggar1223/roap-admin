@@ -90,7 +90,7 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
                                 <span className={cn(pathname?.includes('/branches') && 'text-main')}>Branches</span>
                             </SidebarMenuButton>
                         </Link>
-                        <Link href='/athletes'>
+                        <Link prefetch={true} href='/athletes'>
                             <SidebarMenuButton className={cn(pathname?.includes('/athletes') && 'bg-sidebar-accent')} tooltip='Athletes'>
                                 <Users className={cn(pathname?.includes('/athletes') && 'stroke-main')} />
                                 <span className={cn(pathname?.includes('/athletes') && 'text-main')}>Athletes</span>

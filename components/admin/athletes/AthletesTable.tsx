@@ -37,6 +37,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import Link from 'next/link'
+import { useSuspenseQuery } from '@tanstack/react-query'
 
 type Athlete = {
     id: number
@@ -67,6 +68,7 @@ type FilterState = {
     sportName: string
     userName: string
     userEmail: string
+    userPhone: string
 }
 
 type AcademicGroup = {
@@ -79,7 +81,7 @@ type AcademicGroup = {
 export default function AthletesTable() {
     const router = useRouter()
 
-    const [allAthletes, setAllAthletes] = useState<Athlete[]>([])
+    // const [allAthletes, setAllAthletes] = useState<Athlete[]>([])
     const [meta, setMeta] = useState<PaginationMeta>({
         page: 1,
         pageSize: 10,
@@ -97,54 +99,75 @@ export default function AthletesTable() {
         sportName: '',
         userName: '',
         userEmail: '',
+        userPhone: '',
     })
     const [expandedAcademics, setExpandedAcademics] = useState<number[]>([])
 
-    const fetchAthletes = () => {
-        startTransition(async () => {
+    // const fetchAthletes = () => {
+    //     startTransition(async () => {
+    //         // Fetch all athletes at once
+    //         const result = await getPaginatedAthletes(1, 1000) // Large page size to get all
+    //         if (result?.data) {
+    //             setAllAthletes(result.data)
+    //             setMeta({
+    //                 ...meta,
+    //                 totalItems: result.data.length,
+    //                 totalPages: Math.ceil(result.data.length / meta.pageSize)
+    //             })
+
+    //             // Expand all academics by default
+    //             const academicIds = [...new Set(result.data.map(athlete => athlete.academicId))];
+    //             setExpandedAcademics(academicIds as number[]);
+    //         }
+    //         setSelectedRows([])
+    //     })
+    // }
+
+    const { data: allAthletes, isLoading: isAthletesLoading, refetch } = useSuspenseQuery({
+        queryKey: ['athletes'],
+        queryFn: async () => {
             // Fetch all athletes at once
             const result = await getPaginatedAthletes(1, 1000) // Large page size to get all
             if (result?.data) {
-                setAllAthletes(result.data)
-                setMeta({
-                    ...meta,
-                    totalItems: result.data.length,
-                    totalPages: Math.ceil(result.data.length / meta.pageSize)
-                })
+                // setAllAthletes(result.data)
+                // setMeta({
+                //     ...meta,
+                //     totalItems: result.data.length,
+                //     totalPages: Math.ceil(result.data.length / meta.pageSize)
+                // })
 
                 // Expand all academics by default
                 const academicIds = [...new Set(result.data.map(athlete => athlete.academicId))];
                 setExpandedAcademics(academicIds as number[]);
             }
             setSelectedRows([])
-        })
-    }
-
-    useEffect(() => {
-        fetchAthletes()
-    }, [])
+            return result.data
+        },
+    })
 
     // Get all unique sports from athletes
-    const availableSports = useMemo(() => {
-        const sportsMap = new Map<number, { id: number, name: string }>();
+    // const availableSports = useMemo(() => {
+    //     const sportsMap = new Map<number, { id: number, name: string }>();
 
-        allAthletes.forEach(athlete => {
-            if (athlete.sportId && athlete.sportName) {
-                if (!sportsMap.has(athlete.sportId)) {
-                    sportsMap.set(athlete.sportId, {
-                        id: athlete.sportId,
-                        name: athlete.sportName
-                    });
-                }
-            }
-        });
+    //     allAthletes?.forEach(athlete => {
+    //         if (athlete.sportId && athlete.sportName) {
+    //             if (!sportsMap.has(athlete.sportId)) {
+    //                 sportsMap.set(athlete.sportId, {
+    //                     id: athlete.sportId,
+    //                     name: athlete.sportName
+    //                 });
+    //             }
+    //         }
+    //     });
 
-        return Array.from(sportsMap.values());
-    }, [allAthletes]);
+    //     return Array.from(sportsMap.values());
+    // }, [allAthletes]);
+
+    console.log("All athletes", allAthletes)
 
     // Apply filters in memory
     const filteredAthletes = useMemo(() => {
-        return allAthletes.filter(athlete => {
+        return allAthletes?.filter(athlete => {
             // Profile name filter
             if (filters.profileName && athlete.profileName) {
                 if (!athlete.profileName.toLowerCase().includes(filters.profileName.toLowerCase())) {
@@ -176,6 +199,13 @@ export default function AthletesTable() {
             // User email filter
             if (filters.userEmail && athlete.userEmail) {
                 if (!athlete.userEmail.toLowerCase().includes(filters.userEmail.toLowerCase())) {
+                    return false
+                }
+            }
+
+            // User phone filter
+            if (filters.userPhone && athlete.userPhone) {
+                if (!athlete.userPhone.toLowerCase().includes(filters.userPhone.toLowerCase())) {
                     return false
                 }
             }
@@ -263,7 +293,8 @@ export default function AthletesTable() {
         setBulkDeleteLoading(true)
         await deleteAthletes(selectedRows)
         router.refresh()
-        fetchAthletes() // Refresh data after delete
+        // fetchAthletes() // Refresh data after delete
+        refetch()
         setBulkDeleteLoading(false)
         setBulkDeleteOpen(false)
     }
@@ -284,6 +315,7 @@ export default function AthletesTable() {
             sportName: '',
             userName: '',
             userEmail: '',
+            userPhone: '',
         })
         setFiltersOpen(false)
     }
@@ -520,6 +552,16 @@ export default function AthletesTable() {
                                         placeholder="Filter by email"
                                         value={filters.userEmail}
                                         onChange={(e) => handleFilterChange('userEmail', e.target.value)}
+                                    />
+                                </div>
+                                <div className="grid gap-3">
+                                    <label className="text-sm font-medium leading-none">
+                                        Phone Number
+                                    </label>
+                                    <Input
+                                        placeholder="Filter by phone number"
+                                        value={filters.userPhone}
+                                        onChange={(e) => handleFilterChange('userPhone', e.target.value)}
                                     />
                                 </div>
                             </div>
