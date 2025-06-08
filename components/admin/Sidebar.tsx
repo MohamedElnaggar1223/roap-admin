@@ -14,7 +14,7 @@ import {
 import { CMS } from "./CMS"
 import { JoinUs } from "./JoinUs"
 import { UserManagement } from "./UserManagement"
-import { BookOpen, Component, Contact, Languages, MapPin, Users, Volleyball } from "lucide-react"
+import { BookOpen, Component, Contact, Gift, Languages, MapPin, Users, Volleyball } from "lucide-react"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -94,6 +94,12 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
                             <SidebarMenuButton className={cn(pathname?.includes('/athletes') && 'bg-sidebar-accent')} tooltip='Athletes'>
                                 <Users className={cn(pathname?.includes('/athletes') && 'stroke-main')} />
                                 <span className={cn(pathname?.includes('/athletes') && 'text-main')}>Athletes</span>
+                            </SidebarMenuButton>
+                        </Link>
+                        <Link href='/promo-codes' prefetch={true}>
+                            <SidebarMenuButton className={cn(pathname?.includes('/promo-codes') && 'bg-sidebar-accent')} tooltip='Promo Codes'>
+                                <Gift className={cn(pathname?.includes('/promo-codes') && 'stroke-main')} />
+                                <span className={cn(pathname?.includes('/promo-codes') && 'text-main')}>Promo Codes</span>
                             </SidebarMenuButton>
                         </Link>
                     </SidebarGroup>
