@@ -151,7 +151,7 @@ export async function createPromoCodeAdmin(data: {
     startDate: Date
     endDate: Date
     canBeUsed: number
-    academicId: number | null // null for general promo codes
+    academicIds: number[] | null // Changed from academicId to academicIds array
 }) {
     const isAdminRes = await isAdmin()
 
@@ -168,46 +168,84 @@ export async function createPromoCodeAdmin(data: {
     }
 
     try {
-        // Check if code already exists for the same academy (or null for general)
-        const existingPromoCode = await db
-            .select({ id: promoCodes.id })
+        // If academicIds is null or empty, create a general promo code
+        if (!data.academicIds || data.academicIds.length === 0) {
+            // Check if general promo code with this code already exists
+            const existingPromoCode = await db
+                .select({ id: promoCodes.id })
+                .from(promoCodes)
+                .where(
+                    and(
+                        eq(promoCodes.code, data.code),
+                        isNull(promoCodes.academicId)
+                    )
+                )
+                .limit(1)
+
+            if (existingPromoCode.length > 0) {
+                return {
+                    error: 'A general promo code with this code already exists',
+                    field: 'code'
+                }
+            }
+
+            const [newPromoCode] = await db
+                .insert(promoCodes)
+                .values({
+                    code: data.code,
+                    discountType: data.discountType as 'fixed' | 'percentage',
+                    discountValue: data.discountValue,
+                    startDate: formatDateForDB(data.startDate),
+                    endDate: formatDateForDB(data.endDate),
+                    canBeUsed: data.canBeUsed,
+                    academicId: null,
+                    createdAt: sql`now()`,
+                    updatedAt: sql`now()`,
+                })
+                .returning({ id: promoCodes.id })
+
+            revalidatePath('/admin/promo-codes')
+            return { success: true, data: [newPromoCode] }
+        }
+
+        // For multiple academies, check for existing promo codes for each academy
+        const existingPromoCodes = await db
+            .select({ id: promoCodes.id, academicId: promoCodes.academicId })
             .from(promoCodes)
             .where(
                 and(
                     eq(promoCodes.code, data.code),
-                    data.academicId
-                        ? eq(promoCodes.academicId, data.academicId)
-                        : isNull(promoCodes.academicId)
+                    inArray(promoCodes.academicId, data.academicIds)
                 )
             )
-            .limit(1)
 
-        if (existingPromoCode.length > 0) {
+        if (existingPromoCodes.length > 0) {
             return {
-                error: data.academicId
-                    ? 'A promo code with this code already exists for this academy'
-                    : 'A general promo code with this code already exists',
+                error: `A promo code with this code already exists for ${existingPromoCodes.length} of the selected academies`,
                 field: 'code'
             }
         }
 
-        const [newPromoCode] = await db
+        // Create promo codes for each selected academy
+        const promoCodeValues = data.academicIds.map(academicId => ({
+            code: data.code,
+            discountType: data.discountType as 'fixed' | 'percentage',
+            discountValue: data.discountValue,
+            startDate: formatDateForDB(data.startDate),
+            endDate: formatDateForDB(data.endDate),
+            canBeUsed: data.canBeUsed,
+            academicId: academicId,
+            createdAt: sql`now()`,
+            updatedAt: sql`now()`,
+        }))
+
+        const newPromoCodes = await db
             .insert(promoCodes)
-            .values({
-                code: data.code,
-                discountType: data.discountType as 'fixed' | 'percentage',
-                discountValue: data.discountValue,
-                startDate: formatDateForDB(data.startDate),
-                endDate: formatDateForDB(data.endDate),
-                canBeUsed: data.canBeUsed,
-                academicId: data.academicId,
-                createdAt: sql`now()`,
-                updatedAt: sql`now()`,
-            })
+            .values(promoCodeValues)
             .returning({ id: promoCodes.id })
 
         revalidatePath('/admin/promo-codes')
-        return { success: true, data: newPromoCode }
+        return { success: true, data: newPromoCodes, count: newPromoCodes.length }
 
     } catch (error) {
         console.error('Error creating promo code:', error)

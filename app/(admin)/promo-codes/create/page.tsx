@@ -18,7 +18,7 @@ import { useRouter } from "next/navigation"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
 import { createPromoCodeAdmin, getAllAcademiesForSelect } from "@/lib/actions/admin-promo-codes.actions"
-import { adminPromoCodeSchema, type AdminPromoCodeFormData } from "@/lib/validations/admin-promo-codes"
+import { adminPromoCodeCreateSchema, type AdminPromoCodeCreateFormData } from "@/lib/validations/admin-promo-codes"
 import {
     Select,
     SelectContent,
@@ -26,6 +26,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 
 type Academy = {
     id: number
@@ -37,8 +38,8 @@ export default function CreatePromoCodeAdmin() {
     const [loading, setLoading] = useState(false)
     const [academies, setAcademies] = useState<Academy[]>([])
 
-    const form = useForm<AdminPromoCodeFormData>({
-        resolver: zodResolver(adminPromoCodeSchema),
+    const form = useForm<AdminPromoCodeCreateFormData>({
+        resolver: zodResolver(adminPromoCodeCreateSchema),
         defaultValues: {
             code: '',
             discountType: 'fixed',
@@ -46,21 +47,30 @@ export default function CreatePromoCodeAdmin() {
             startDate: new Date(),
             endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
             canBeUsed: 1,
-            academicId: null,
+            selectionMode: 'general',
+            academicIds: null,
         },
     })
 
     useEffect(() => {
         async function fetchAcademies() {
-            const academyData = await getAllAcademiesForSelect()
-            setAcademies(academyData)
+            try {
+                const academyData = await getAllAcademiesForSelect()
+                console.log('Fetched academies:', academyData) // Debug log
+                setAcademies(academyData)
+            } catch (error) {
+                console.error('Error fetching academies:', error)
+            }
         }
         fetchAcademies()
     }, [])
 
-    async function onSubmit(values: AdminPromoCodeFormData) {
+    async function onSubmit(values: AdminPromoCodeCreateFormData) {
         try {
             setLoading(true)
+
+            // Convert selection mode to the expected format
+            const academicIds = values.selectionMode === 'general' ? null : values.academicIds
 
             const result = await createPromoCodeAdmin({
                 code: values.code,
@@ -69,7 +79,7 @@ export default function CreatePromoCodeAdmin() {
                 startDate: values.startDate,
                 endDate: values.endDate,
                 canBeUsed: values.canBeUsed,
-                academicId: values.academicId,
+                academicIds: academicIds,
             })
 
             if (result.error) {
@@ -90,6 +100,28 @@ export default function CreatePromoCodeAdmin() {
             })
         } finally {
             setLoading(false)
+        }
+    }
+
+    const selectedAcademyIds = form.watch('academicIds')
+    const selectionMode = form.watch('selectionMode')
+    const isGeneral = selectionMode === 'general'
+
+    const handleAcademyToggle = (academyId: number, checked: boolean) => {
+        const currentIds = form.getValues('academicIds') || []
+        if (checked) {
+            form.setValue('academicIds', [...currentIds, academyId])
+        } else {
+            form.setValue('academicIds', currentIds.filter(id => id !== academyId))
+        }
+    }
+
+    const handleSelectionModeChange = (mode: string) => {
+        form.setValue('selectionMode', mode as 'general' | 'specific')
+        if (mode === 'general') {
+            form.setValue('academicIds', null)
+        } else {
+            form.setValue('academicIds', [])
         }
     }
 
@@ -123,33 +155,71 @@ export default function CreatePromoCodeAdmin() {
 
                             <FormField
                                 control={form.control}
-                                name="academicId"
+                                name="selectionMode"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Academy</FormLabel>
+                                        <FormLabel>Promo Code Scope</FormLabel>
                                         <Select
                                             disabled={loading}
-                                            onValueChange={(value) => field.onChange(value === "general" ? null : parseInt(value))}
-                                            value={field.value === null ? "general" : field.value?.toString()}
+                                            onValueChange={(value) => {
+                                                field.onChange(value)
+                                                handleSelectionModeChange(value)
+                                            }}
+                                            value={field.value}
                                         >
                                             <FormControl>
                                                 <SelectTrigger className='max-w-[570px] focus-visible:ring-main focus-visible:ring-2'>
-                                                    <SelectValue placeholder="Select academy or leave general" />
+                                                    <SelectValue placeholder="Choose promo code scope" />
                                                 </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                                <SelectItem value="general">General (All Academies)</SelectItem>
-                                                {academies.map((academy) => (
-                                                    <SelectItem key={academy.id} value={academy.id.toString()}>
-                                                        {academy.name}
-                                                    </SelectItem>
-                                                ))}
+                                                <SelectItem value="general">General - Apply to all academies</SelectItem>
+                                                <SelectItem value="specific">Specific Academies - Choose which academies</SelectItem>
                                             </SelectContent>
                                         </Select>
                                         <FormMessage />
                                     </FormItem>
                                 )}
                             />
+
+                            {selectionMode === 'specific' && (
+                                <FormField
+                                    control={form.control}
+                                    name="academicIds"
+                                    render={() => (
+                                        <FormItem>
+                                            <FormLabel>Select Academies</FormLabel>
+                                            <div className="space-y-2 max-w-[570px] border rounded-md p-4 max-h-60 overflow-y-auto">
+                                                {academies.length === 0 ? (
+                                                    <div className="text-sm text-muted-foreground">
+                                                        No academies available or loading...
+                                                    </div>
+                                                ) : (
+                                                    academies.map((academy) => (
+                                                        <div key={academy.id} className="flex items-center space-x-2">
+                                                            <Checkbox
+                                                                id={`academy-${academy.id}`}
+                                                                checked={selectedAcademyIds?.includes(academy.id) || false}
+                                                                onCheckedChange={(checked) =>
+                                                                    handleAcademyToggle(academy.id, checked as boolean)
+                                                                }
+                                                                disabled={loading}
+                                                            />
+                                                            <label
+                                                                htmlFor={`academy-${academy.id}`}
+                                                                className="text-sm cursor-pointer"
+                                                            >
+                                                                {academy.name}
+                                                            </label>
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            )}
 
                             <div className="flex gap-4">
                                 <FormField
@@ -286,7 +356,7 @@ export default function CreatePromoCodeAdmin() {
                             size="default"
                         >
                             {loading && <Loader2 className='mr-2 h-5 w-5 animate-spin' />}
-                            Create Promo Code
+                            Create Promo Code{(selectionMode === 'specific' && selectedAcademyIds && selectedAcademyIds.length > 1) ? `s (${selectedAcademyIds.length})` : ''}
                         </Button>
                     </div>
                 </form>
